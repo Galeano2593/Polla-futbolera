@@ -1,6 +1,7 @@
 import type { Match, Prediction, LeaderboardRow } from '@/types';
 
-const SUPABASE_URL = 'https://trumjgtfgcnrfushtgtn.supabase.co';
+// 🇨🇴 Conexiones reales corregidas con las letras exactas de tu proyecto
+const SUPABASE_URL = 'https://trumjgflgcnrfusfxgtn.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ox0kx_GxNVWo4lTsdzKTbg_Ou7uiWDI';
 
 
