@@ -1,36 +1,26 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from '@/context/AuthContext';
-import AuthView from '@/views/AuthView';
+import { AuthProvider } from '@/context/AuthContext';
 import Layout from '@/components/Layout';
+import AuthView from '@/views/AuthView';
 import PredictionsView from '@/views/PredictionsView';
 import LeaderboardView from '@/views/LeaderboardView';
 import AdminView from '@/views/AdminView';
+import RulesView from '@/views/RulesView'; // Importación de la nueva vista de reglas
+import { useAuth } from '@/context/AuthContext';
 import type { ReactNode } from 'react';
 
+// Protector de Rutas para Usuarios Autenticados
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-  if (!user) return <Navigate to="/" replace />;
-  return <Layout>{children}</Layout>;
+  const { token } = useAuth();
+  if (!token) return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
+// Protector de Rutas exclusivo para el Administrador
 function AdminRoute({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user?.isAdmin) return <Navigate to="/predictions" replace />;
-  return <Layout>{children}</Layout>;
-}
-
-function PublicRoute({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (user) return <Navigate to="/predictions" replace />;
+  const { user, token } = useAuth();
+  if (!token) return <Navigate to="/" replace />;
+  if (user?.role !== 'admin') return <Navigate to="/predictions" replace />;
   return <>{children}</>;
 }
 
@@ -39,41 +29,38 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Ruta Pública: Ingreso / Registro */}
+          <Route path="/" element={<AuthView />} />
+
+          {/* Rutas Privadas Protegidas por el Layout Común */}
           <Route
             path="/"
             element={
-              <PublicRoute>
-                <AuthView />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/predictions"
-            element={
               <ProtectedRoute>
-                <PredictionsView />
+                <Layout />
               </ProtectedRoute>
             }
-          />
-          <Route
-            path="/leaderboard"
-            element={
-              <ProtectedRoute>
-                <LeaderboardView />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <AdminRoute>
-                <AdminView />
-              </AdminRoute>
-            }
-          />
+          >
+            <Route path="predictions" element={<PredictionsView />} />
+            <Route path="leaderboard" element={<LeaderboardView />} />
+            <Route path="rules" element={<RulesView />} /> {/* Enlace de la ruta de reglas */}
+            
+            {/* Ruta exclusiva del Administrador */}
+            <Route
+              path="admin"
+              element={
+                <AdminRoute>
+                  <AdminView />
+                </AdminRoute>
+              }
+            />
+          </Route>
+
+          {/* Redirección por defecto si la ruta no existe */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
   );
 }
+
