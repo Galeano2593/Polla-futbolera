@@ -136,54 +136,57 @@ export const api = {
     };
   },
 
-  getLeaderboard: async () => {
-    // Filtrar al administrador directo desde la API para evitar conflictos lógicos
+    getLeaderboard: async () => {
+    // 🛠️ Petición general sin filtros restrictivos para asegurar la respuesta de Supabase
     const [users, matches, allPredictions] = await Promise.all([
-      sbRequest<any[]>(`users?role=neq.admin&select=*`),
+      sbRequest<any[]>(`users?select=*`),
       sbRequest<any[]>(`matches?select=*`),
       sbRequest<any[]>(`predictions?select=*`)
     ]);
 
-    const leaderboard: LeaderboardRow[] = users.map((u) => {
-      let points = 0;
-      const userPredictions = allPredictions.filter(p => p.username === u.username);
+    // Filtrar al administrador de forma segura en la interfaz de React
+    const leaderboard: LeaderboardRow[] = users
+      .filter(u => u.username !== 'admin' && u.role !== 'admin')
+      .map((u) => {
+        let points = 0;
+        const userPredictions = allPredictions.filter(p => p.username === u.username);
 
-      userPredictions.forEach(p => {
-        const match = matches.find(m => m.id === p.match_id);
-        if (match && match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
-          const actualHome = match.home_score;
-          const actualAway = match.away_score;
-          const predHome = p.home_score;
-          const predAway = p.away_score;
+        userPredictions.forEach(p => {
+          const match = matches.find(m => m.id === p.match_id);
+          if (match && match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
+            const actualHome = match.home_score;
+            const actualAway = match.away_score;
+            const predHome = p.home_score;
+            const predAway = p.away_score;
 
-          let matchPoints = 0;
-          if (predHome === actualHome && predAway === actualAway) {
-            matchPoints = 10;
-          } else {
-            const actualWinner = actualHome > actualAway ? 'home' : actualHome < actualAway ? 'away' : 'draw';
-            const predWinner = predHome > predAway ? 'home' : predHome < predAway ? 'away' : 'draw';
-            if (actualWinner === predWinner) matchPoints = 7;
-            if (predHome === actualHome || predAway === actualAway) {
-              if (matchPoints < 4) matchPoints = 4;
+            let matchPoints = 0;
+            if (predHome === actualHome && predAway === actualAway) {
+              matchPoints = 10;
+            } else {
+              const actualWinner = actualHome > actualAway ? 'home' : actualHome < actualAway ? 'away' : 'draw';
+              const predWinner = predHome > predAway ? 'home' : predHome < predAway ? 'away' : 'draw';
+              if (actualWinner === predWinner) matchPoints = 7;
+              if (predHome === actualHome || predAway === actualAway) {
+                if (matchPoints < 4) matchPoints = 4;
+              }
+              const actualDiff = Math.abs(actualHome - actualAway);
+              const predDiff = Math.abs(predHome - predAway);
+              if (actualDiff === predDiff) {
+                if (matchPoints < 2) matchPoints = 2;
+              }
             }
-            const actualDiff = Math.abs(actualHome - actualAway);
-            const predDiff = Math.abs(predHome - predAway);
-            if (actualDiff === predDiff) {
-              if (matchPoints < 2) matchPoints = 2;
-            }
+            points += matchPoints;
           }
-          points += matchPoints;
-        }
-      });
+        });
 
-      return {
-        rank: 0,
-        userId: u.username,
-        username: u.full_name,
-        points,
-        played: userPredictions.length,
-      };
-    });
+        return {
+          rank: 0,
+          userId: u.username,
+          username: u.full_name,
+          points,
+          played: userPredictions.length,
+        };
+      });
 
     leaderboard.sort((a, b) => b.points - a.points);
     leaderboard.forEach((row, i) => row.rank = i + 1);
