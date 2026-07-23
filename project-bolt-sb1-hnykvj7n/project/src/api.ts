@@ -23,8 +23,9 @@ async function sbRequest<T>(path: string, options: RequestInit = {}): Promise<T>
     throw new Error(errData.message || 'Error en la base de datos');
   }
   
-  if (options.method === 'POST' || options.method === 'PATCH' || options.method === 'DELETE') {
-    return {} as T; 
+  // Si la respuesta no tiene contenido (No Content 204), devolvemos un objeto vacío seguro
+  if (res.status === 204) {
+    return {} as T;
   }
   
   return await res.json() as T;
@@ -34,7 +35,6 @@ export const api = {
   register: async (username: string, password: string, fullName: string) => {
     const cleanUsername = username.trim().toLowerCase();
     
-    // Crear usuario en la nube de Supabase
     await sbRequest(`users`, {
       method: 'POST',
       body: JSON.stringify({
@@ -43,7 +43,9 @@ export const api = {
         full_name: fullName.trim(),
         role: cleanUsername === 'admin' ? 'admin' : 'user'
       }),
-      headers: { 'Prefer': 'resolution=merge-duplicates' }
+      headers: { 
+        'Prefer': 'resolution=merge-duplicates,return=representation' 
+      }
     });
 
     const user: AuthUser = { id: cleanUsername, username: fullName.trim(), role: cleanUsername === 'admin' ? 'admin' : 'user' };
@@ -55,7 +57,6 @@ export const api = {
   login: async (username: string, password: string) => {
     const cleanUsername = username.trim().toLowerCase();
     
-    // Acceso forzado de contingencia para la cuenta maestra de administración
     if (cleanUsername === 'admin' && password === 'admin123') {
       const adminUser: AuthUser = { id: 'admin', username: 'Administrador', role: 'admin' };
       localStorage.setItem('pf_token', 'sb-token-admin');
@@ -64,7 +65,7 @@ export const api = {
     }
 
     const res = await sbRequest<any[]>(`users?username=eq.${cleanUsername}&select=*`);
-    const dbUser = res[0]; // Captura el primer elemento coincidente de la consulta
+    const dbUser = res[0];
 
     if (!dbUser || dbUser.password !== password) {
       throw new Error('Usuario o contraseña incorrectos');
@@ -78,7 +79,17 @@ export const api = {
 
   getMatches: async () => {
     const matches = await sbRequest<Match[]>(`matches?select=*&order=kickoff.asc`);
-    return { matches };
+    // Mapear nombres de columnas de base de datos a nombres de la interfaz
+    const mapped = matches.map((m: any) => ({
+      id: m.id,
+      homeTeam: m.home_team,
+      awayTeam: m.away_team,
+      kickoff: m.kickoff,
+      status: m.status,
+      homeScore: m.home_score,
+      awayScore: m.away_score
+    }));
+    return { matches: mapped };
   },
 
   getPredictions: async () => {
@@ -124,7 +135,7 @@ export const api = {
   getLeaderboard: async () => {
     const [users, matches, allPredictions] = await Promise.all([
       sbRequest<any[]>(`users?select=*`),
-      sbRequest<Match[]>(`matches?select=*`),
+      sbRequest<any[]>(`matches?select=*`),
       sbRequest<any[]>(`predictions?select=*`)
     ]);
 
@@ -136,15 +147,13 @@ export const api = {
 
         userPredictions.forEach(p => {
           const match = matches.find(m => m.id === p.match_id);
-          if (match && match.status === 'finished' && match.homeScore !== null && match.awayScore !== null) {
-            const actualHome = match.homeScore;
-            const actualAway = match.awayScore;
+          if (match && match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
+            const actualHome = match.home_score;
+            const actualAway = match.away_score;
             const predHome = p.home_score;
             const predAway = p.away_score;
 
             let matchPoints = 0;
-            
-            // Evalúa el sistema de puntos: 10, 7, 4 y 2 puntos respectivamente
             if (predHome === actualHome && predAway === actualAway) {
               matchPoints = 10;
             } else {
@@ -178,10 +187,8 @@ export const api = {
     return { leaderboard };
   },
 
-     adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
+  adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
     const matchId = `m-${Date.now()}`;
-    
-    // 🇨🇴 Se limpia el formato y se le añade de forma obligatoria la zona horaria de Colombia (-05)
     const formattedKickoff = data.kickoff.replace('T', ' ') + ':00-05';
 
     await sbRequest(`matches`, {
@@ -192,20 +199,13 @@ export const api = {
         away_team: data.awayTeam.trim(),
         kickoff: formattedKickoff,
         status: 'scheduled'
-      })
+      }),
+      headers: {
+        'Prefer': 'return=representation' // <--- Obliga a Supabase a responder con datos legibles
+      }
     });
-    
-    return { 
-      match: { 
-        id: matchId, 
-        homeTeam: data.homeTeam, 
-        awayTeam: data.awayTeam, 
-        kickoff: data.kickoff, 
-        status: 'scheduled' 
-      } 
-    };
+    return { match: { id: matchId, homeTeam: data.homeTeam, awayTeam: data.awayTeam, kickoff: data.kickoff, status: 'scheduled' } };
   },
-
 
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
@@ -214,11 +214,13 @@ export const api = {
         status: 'finished',
         home_score: homeScore,
         away_score: awayScore
-      })
+      }),
+      headers: {
+        'Prefer': 'return=representation'
+      }
     });
-    return { match: { id: matchId, homeTeam: '', awayTeam: '', kickoff: '', status: 'finished', homeScore, awayScore }, predictionsUpdated: 1 };
+    return { match: {} as Match, predictionsUpdated: 1 };
   },
-
 
   adminDeleteUser: async (usernameToDelete: string) => {
     await sbRequest(`users?username=eq.${usernameToDelete}`, {
