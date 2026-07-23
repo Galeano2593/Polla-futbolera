@@ -178,11 +178,11 @@ export const api = {
     return { leaderboard };
   },
 
-   adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
+     adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
     const matchId = `m-${Date.now()}`;
     
-    // Convertir la fecha del formulario al formato exacto que exige Supabase (YYYY-MM-DD HH:MM:SS)
-    const formattedKickoff = data.kickoff.replace('T', ' ') + ':00';
+    // 🇨🇴 Se limpia el formato y se le añade de forma obligatoria la zona horaria de Colombia (-05)
+    const formattedKickoff = data.kickoff.replace('T', ' ') + ':00-05';
 
     await sbRequest(`matches`, {
       method: 'POST',
