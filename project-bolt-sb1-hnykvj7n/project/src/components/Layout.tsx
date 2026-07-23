@@ -1,71 +1,101 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { Goal, ClipboardList, Trophy, ShieldCheck, LogOut } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Trophy, Calendar, LogOut, ShieldAlert } from 'lucide-react';
 
-export default function Layout({ children }: { children: ReactNode }) {
+export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   function handleLogout() {
     logout();
     navigate('/');
   }
 
-  const navItems = [
-    { to: '/predictions', label: 'Predicciones', icon: ClipboardList },
-    { to: '/leaderboard', label: 'Tabla', icon: Trophy },
-    ...(user?.isAdmin ? [{ to: '/admin', label: 'Admin', icon: ShieldCheck }] : []),
-  ];
-
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* Top bar */}
-      <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500">
-              <Goal className="w-4.5 h-4.5 text-white" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30">
+      {/* Encabezado Principal */}
+      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800/60 sticky top-0 z-40">
+        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 shadow-md shadow-emerald-500/5">
+              <Trophy className="w-5 h-5 text-emerald-400" />
             </div>
-            <span className="font-bold text-slate-900">Polla Futbolera</span>
+            <span className="font-bold text-lg tracking-tight text-white">Polla Futbolera</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-500 hidden sm:block">
-              {user?.username}
+
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-medium bg-slate-800 text-slate-300 px-3 py-1.5 rounded-full border border-slate-700/50">
+              ⚽ {user?.username}
             </span>
             <button
               onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-red-500 transition"
+              className="text-slate-400 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors flex items-center gap-1 text-sm font-medium"
+              title="Salir de la polla"
             >
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Salir</span>
             </button>
           </div>
         </div>
+
+        {/* Bandera de Colombia Decorativa Estilizada */}
+        <div className="w-full h-1 flex shadow-inner">
+          <div className="bg-yellow-400 h-full w-1/2"></div>
+          <div className="bg-blue-600 h-full w-1/4"></div>
+          <div className="bg-red-600 h-full w-1/4"></div>
+        </div>
       </header>
 
-      {/* Content */}
-      <main className="flex-1 pb-20">{children}</main>
+      {/* Contenido de la Aplicación */}
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6 mb-20">
+        <Outlet />
+      </main>
 
-      {/* Bottom nav (mobile-first) */}
-      <nav className="fixed bottom-0 inset-x-0 z-20 bg-white/90 backdrop-blur-md border-t border-slate-200">
-        <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-around">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition ${
-                  isActive ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
-                }`
-              }
+      {/* Menú de Navegación Inferior Móvil / Escritorio */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-xl border-t border-slate-800/80 z-40 shadow-2xl">
+        <div className="max-w-md mx-auto px-6 h-16 flex justify-around items-center">
+          <Link
+            to="/predictions"
+            className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
+              location.pathname === '/predictions'
+                ? 'text-emerald-400 scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Calendar className="w-5 h-5" />
+            <span>Predicciones</span>
+          </Link>
+
+          <Link
+            to="/leaderboard"
+            className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
+              location.pathname === '/leaderboard'
+                ? 'text-emerald-400 scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Trophy className="w-5 h-5" />
+            <span>Tabla</span>
+          </Link>
+
+          {/* Acceso rápido para el Administrador de la Liga BetPlay */}
+          {user?.role === 'admin' && (
+            <Link
+              to="/admin"
+              className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
+                location.pathname === '/admin'
+                  ? 'text-yellow-400 scale-105'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
             >
-              <item.icon className="w-5 h-5" />
-              <span className="text-xs font-medium">{item.label}</span>
-            </NavLink>
-          ))}
+              <ShieldAlert className="w-5 h-5" />
+              <span>Admin</span>
+            </Link>
+          )}
         </div>
       </nav>
     </div>
   );
 }
+
