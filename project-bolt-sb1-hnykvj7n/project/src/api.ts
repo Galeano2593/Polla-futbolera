@@ -2,7 +2,7 @@ import type { Match, Prediction, LeaderboardRow } from '@/types';
 
 // 🇨🇴 Conexiones reales corregidas con las letras exactas de tu proyecto
 const SUPABASE_URL = 'https://trumjgflgcnrfusfxgtn.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_ox0kx_GxNVWo4lTsdzKTbg_Ou7uiWDI';
+const SUPABASE_KEY = 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI';
 
 
 async function sbRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
