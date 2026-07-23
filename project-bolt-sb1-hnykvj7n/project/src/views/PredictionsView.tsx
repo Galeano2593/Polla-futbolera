@@ -83,16 +83,16 @@ export default function PredictionsView() {
         <p className="text-slate-400 text-sm mt-1">Ingresa tus marcadores antes del inicio de cada partido</p>
       </div>
 
-      <div className="grid gap-4">
-        {matches.map((match) => {
+      <div className="grid gap-4 w-full px-1">
+         {matches.map((match) => {
           const isSaved = savedStatus[match.id];
           const hasScores = scores[match.id]?.home !== '' && scores[match.id]?.away !== '';
 
           return (
             <div
-              key={match.id}
-              className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-5 shadow-xl transition-all hover:border-slate-700/60"
-            >
+  key={match.id}
+  className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xl transition-all hover:border-slate-700/60 w-full overflow-hidden"
+>
               <div className="flex justify-between items-center text-xs text-slate-400 mb-4 border-b border-slate-800/50 pb-2">
                 <div className="flex items-center gap-1.5 font-medium">
                   <Calendar className="w-3.5 h-3.5 text-emerald-400" />
@@ -116,7 +116,7 @@ export default function PredictionsView() {
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex flex-1 items-center justify-center gap-4 w-full">
+               <div className="flex flex-1 items-center justify-center gap-2 sm:gap-4 w-full overflow-hidden">
                   <div className="flex-1 text-right font-semibold text-sm sm:text-base text-slate-100 truncate">
                     {match.homeTeam}
                   </div>
