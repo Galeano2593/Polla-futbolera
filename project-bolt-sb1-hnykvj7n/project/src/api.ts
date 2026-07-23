@@ -1,7 +1,8 @@
 import type { Match, Prediction, LeaderboardRow } from '@/types';
 
-const SUPABASE_URL = 'https://ox0kx_GxNVWo4lTsdzKTbg_Ou7uiWDI.supabase.co'; 
+const SUPABASE_URL = 'https://supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ox0kx_GxNVWo4lTsdzKTbg_Ou7uiWDI';
+
 
 async function sbRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
