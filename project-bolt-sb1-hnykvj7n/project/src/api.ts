@@ -1,6 +1,6 @@
 import type { Match, Prediction, LeaderboardRow } from '@/types';
 
-const SUPABASE_URL = 'https://supabase.co';
+const SUPABASE_URL = 'https://trumjgtfgcnrfushtgtn.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ox0kx_GxNVWo4lTsdzKTbg_Ou7uiWDI';
 
 
