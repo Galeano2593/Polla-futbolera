@@ -10,6 +10,7 @@ export default function AuthView() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState(''); // Estado para capturar el nombre real
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -18,8 +19,13 @@ export default function AuthView() {
     setError('');
     setBusy(true);
     try {
-      if (mode === 'login') await login(username, password);
-      else await register(username, password);
+      if (mode === 'login') {
+        await login(username, password);
+      } else {
+        // Enviar el nombre completo como tercer parámetro al registrarse
+        // @ts-ignore
+        await register(username, password, fullName);
+      }
       navigate('/predictions');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
@@ -50,7 +56,10 @@ export default function AuthView() {
           <div className="flex gap-2 p-1 bg-slate-900/50 rounded-xl mb-6">
             <button
               type="button"
-              onClick={() => setMode('login')}
+              onClick={() => {
+                setMode('login');
+                setError('');
+              }}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
                 mode === 'login'
                   ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
@@ -61,7 +70,10 @@ export default function AuthView() {
             </button>
             <button
               type="button"
-              onClick={() => setMode('register')}
+              onClick={() => {
+                setMode('register');
+                setError('');
+              }}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
                 mode === 'register'
                   ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
@@ -73,9 +85,26 @@ export default function AuthView() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Casilla de Nombre Completo: Solo visible en modo Registro */}
+            {mode === 'register' && (
+              <div className="animate-fadeIn">
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  Nombre Completo (Para la tabla)
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition"
+                  placeholder="Ej: Juan Carlos Pérez"
+                  required={mode === 'register'}
+                />
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                Usuario
+                Usuario (Para iniciar sesión)
               </label>
               <input
                 type="text"
@@ -131,10 +160,9 @@ export default function AuthView() {
       {/* Animación del balón de fútbol cuando está procesando */}
       {busy && (
         <LoadingSoccer 
-          message={mode === 'login' ? 'Validando credenciales...' : 'Creando tu cuenta...'} 
+          message={mode === 'login' ? 'Validando credenciales...' : 'Creando tu cuenta con tu nombre...'} 
         />
       )}
     </div>
   );
 }
-
