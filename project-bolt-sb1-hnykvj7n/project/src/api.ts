@@ -63,7 +63,6 @@ export const api = {
       return { token: 'sb-token-admin', user: adminUser };
     }
 
-    // Consultar el usuario específico de la base de datos
     const res = await sbRequest<any[]>(`users?username=eq.${cleanUsername}&select=*`);
     
     if (!res || res.length === 0) {
@@ -137,55 +136,53 @@ export const api = {
   },
 
   getLeaderboard: async () => {
-    // Forzar lectura limpia ordenando los usuarios para abrir el canal de Supabase sin arreglos vacíos
+    // 🛠️ FILTRADO DIRECTO: Le decimos a Supabase que no traiga al administrador en la lista de jugadores
     const [users, matches, allPredictions] = await Promise.all([
-      sbRequest<any[]>(`users?select=*&order=username.asc`),
+      sbRequest<any[]>(`users?role=neq.admin&select=*`),
       sbRequest<any[]>(`matches?select=*`),
       sbRequest<any[]>(`predictions?select=*`)
     ]);
 
-    const leaderboard: LeaderboardRow[] = users
-      .filter(u => u.username !== 'admin')
-      .map((u) => {
-        let points = 0;
-        const userPredictions = allPredictions.filter(p => p.username === u.username);
+    const leaderboard: LeaderboardRow[] = users.map((u) => {
+      let points = 0;
+      const userPredictions = allPredictions.filter(p => p.username === u.username);
 
-        userPredictions.forEach(p => {
-          const match = matches.find(m => m.id === p.match_id);
-          if (match && match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
-            const actualHome = match.home_score;
-            const actualAway = match.away_score;
-            const predHome = p.home_score;
-            const predAway = p.away_score;
+      userPredictions.forEach(p => {
+        const match = matches.find(m => m.id === p.match_id);
+        if (match && match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
+          const actualHome = match.home_score;
+          const actualAway = match.away_score;
+          const predHome = p.home_score;
+          const predAway = p.away_score;
 
-            let matchPoints = 0;
-            if (predHome === actualHome && predAway === actualAway) {
-              matchPoints = 10;
-            } else {
-              const actualWinner = actualHome > actualAway ? 'home' : actualHome < actualAway ? 'away' : 'draw';
-              const predWinner = predHome > predAway ? 'home' : predHome < predAway ? 'away' : 'draw';
-              if (actualWinner === predWinner) matchPoints = 7;
-              if (predHome === actualHome || predAway === actualAway) {
-                if (matchPoints < 4) matchPoints = 4;
-              }
-              const actualDiff = Math.abs(actualHome - actualAway);
-              const predDiff = Math.abs(predHome - predAway);
-              if (actualDiff === predDiff) {
-                if (matchPoints < 2) matchPoints = 2;
-              }
+          let matchPoints = 0;
+          if (predHome === actualHome && predAway === actualAway) {
+            matchPoints = 10;
+          } else {
+            const actualWinner = actualHome > actualAway ? 'home' : actualHome < actualAway ? 'away' : 'draw';
+            const predWinner = predHome > predAway ? 'home' : predHome < predAway ? 'away' : 'draw';
+            if (actualWinner === predWinner) matchPoints = 7;
+            if (predHome === actualHome || predAway === actualAway) {
+              if (matchPoints < 4) matchPoints = 4;
             }
-            points += matchPoints;
+            const actualDiff = Math.abs(actualHome - actualAway);
+            const predDiff = Math.abs(predHome - predAway);
+            if (actualDiff === predDiff) {
+              if (matchPoints < 2) matchPoints = 2;
+            }
           }
-        });
-
-        return {
-          rank: 0,
-          userId: u.username,
-          username: u.full_name,
-          points,
-          played: userPredictions.length,
-        };
+          points += matchPoints;
+        }
       });
+
+      return {
+        rank: 0,
+        userId: u.username,
+        username: u.full_name,
+        points,
+        played: userPredictions.length,
+      };
+    });
 
     leaderboard.sort((a, b) => b.points - a.points);
     leaderboard.forEach((row, i) => row.rank = i + 1);
