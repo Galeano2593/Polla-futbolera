@@ -1,195 +1,214 @@
 import type { AuthUser, Match, Prediction, LeaderboardRow } from '@/types';
 
-// Claves para LocalStorage
-const KEYS = {
-  USERS: 'pf_users',
-  CURRENT_USER: 'pf_current_user',
-  TOKEN: 'pf_token',
-  MATCHES: 'pf_matches',
-  PREDICTIONS: 'pf_predictions',
-};
+// ==========================================
+// 🛠️ CREDENCIALES DE CONEXIÓN A SUPABASE
+// ==========================================
+const SUPABASE_URL = 'https://ox0kx_GxNVWo4lTsdzKTbg_Ou7uiWDI.supabase.co'; 
+const SUPABASE_KEY = 'sb_publishable_ox0kx_GxNVWo4lTsdzKTbg_Ou7uiWDI';
 
-// --- AYUDANTES DE PERSISTENCIA ---
-function getStorage<T>(key: string, fallback: T): T {
-  const data = localStorage.getItem(key);
-  return data ? JSON.parse(data) : fallback;
-}
-
-function setStorage<T>(key: string, data: T): void {
-  localStorage.setItem(key, JSON.stringify(data));
-}
-
-// --- DATOS SEMILLA (FECHA 1 LIGA BETPLAY 2026-II) ---
-const INITIAL_MATCHES: Match[] = [
-  { id: 'm1', homeTeam: 'Llaneros', awayTeam: 'Deportivo Pereira', kickoff: '2026-07-24T16:00:00Z', status: 'scheduled' },
-  { id: 'm2', homeTeam: 'Deportivo Cali', awayTeam: 'Jaguares FC', kickoff: '2026-07-24T18:15:00Z', status: 'scheduled' },
-  { id: 'm3', homeTeam: 'Millonarios FC', awayTeam: 'Atlético Bucaramanga', kickoff: '2026-07-25T14:00:00Z', status: 'scheduled' },
-  { id: 'm4', homeTeam: 'Independiente Medellín', awayTeam: 'Deportivo Pasto', kickoff: '2026-07-25T16:15:00Z', status: 'scheduled' }
-];
-
-// Inicializar partidos si no existen
-if (!localStorage.getItem(KEYS.MATCHES)) {
-  setStorage(KEYS.MATCHES, INITIAL_MATCHES);
+async function sbRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = `${SUPABASE_URL}/rest/v1/${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      ...options.headers,
+    },
+  });
+  
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.message || 'Error en la base de datos');
+  }
+  
+  if (options.method === 'POST' || options.method === 'PATCH' || options.method === 'DELETE') {
+    return {} as T; 
+  }
+  
+  return await res.json() as T;
 }
 
 export const api = {
-  register: async (username: string, password: string) => {
-    const users = getStorage<Record<string, string>>(KEYS.USERS, {});
-    if (users[username]) throw new Error('El usuario ya existe');
+  register: async (username: string, password: string, fullName: string) => {
+    const cleanUsername = username.trim().toLowerCase();
     
-    users[username] = password;
-    setStorage(KEYS.USERS, users);
+    // Crear usuario en la nube de Supabase
+    await sbRequest(`users`, {
+      method: 'POST',
+      body: JSON.stringify({
+        username: cleanUsername,
+        password: password,
+        full_name: fullName.trim(),
+        role: cleanUsername === 'admin' ? 'admin' : 'user'
+      }),
+      headers: { 'Prefer': 'resolution=merge-duplicates' }
+    });
 
-    const user: AuthUser = { id: username, username, role: username === 'admin' ? 'admin' : 'user' };
-    setStorage(KEYS.CURRENT_USER, user);
-    localStorage.setItem(KEYS.TOKEN, `mock-token-${username}`);
-
-    return { token: `mock-token-${username}`, user };
+    const user: AuthUser = { id: cleanUsername, username: fullName.trim(), role: cleanUsername === 'admin' ? 'admin' : 'user' };
+    localStorage.setItem('pf_token', `sb-token-${cleanUsername}`);
+    localStorage.setItem('pf_current_user', JSON.stringify(user));
+    return { token: `sb-token-${cleanUsername}`, user };
   },
 
   login: async (username: string, password: string) => {
-    const users = getStorage<Record<string, string>>(KEYS.USERS, { admin: 'admin123' });
-    if (!users[username] || users[username] !== password) {
+    const cleanUsername = username.trim().toLowerCase();
+    
+    // Acceso forzado de contingencia para la cuenta maestra de administración
+    if (cleanUsername === 'admin' && password === 'admin123') {
+      const adminUser: AuthUser = { id: 'admin', username: 'Administrador', role: 'admin' };
+      localStorage.setItem('pf_token', 'sb-token-admin');
+      localStorage.setItem('pf_current_user', JSON.stringify(adminUser));
+      return { token: 'sb-token-admin', user: adminUser };
+    }
+
+    const res = await sbRequest<any[]>(`users?username=eq.${cleanUsername}&select=*`);
+    const dbUser = res[0]; // Captura el primer elemento coincidente de la consulta
+
+    if (!dbUser || dbUser.password !== password) {
       throw new Error('Usuario o contraseña incorrectos');
     }
 
-    const user: AuthUser = { id: username, username, role: username === 'admin' ? 'admin' : 'user' };
-    setStorage(KEYS.CURRENT_USER, user);
-    localStorage.setItem(KEYS.TOKEN, `mock-token-${username}`);
-
-    return { token: `mock-token-${username}`, user };
+    const user: AuthUser = { id: dbUser.username, username: dbUser.full_name, role: dbUser.role };
+    localStorage.setItem('pf_token', `sb-token-${dbUser.username}`);
+    localStorage.setItem('pf_current_user', JSON.stringify(user));
+    return { token: `sb-token-${dbUser.username}`, user };
   },
 
   getMatches: async () => {
-    const matches = getStorage<Match[]>(KEYS.MATCHES, []);
+    const matches = await sbRequest<Match[]>(`matches?select=*&order=kickoff.asc`);
     return { matches };
   },
 
   getPredictions: async () => {
-    const currentUser = getStorage<AuthUser | null>(KEYS.CURRENT_USER, null);
-    if (!currentUser) throw new Error('No autenticado');
+    const savedUser = localStorage.getItem('pf_current_user');
+    if (!savedUser) throw new Error('No autenticado');
+    const currentUser = JSON.parse(savedUser);
 
-    const allPredictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
-    const predictions = allPredictions.filter(p => p.userId === currentUser.id);
-    return { predictions };
+    const predictions = await sbRequest<any[]>(`predictions?username=eq.${currentUser.id}&select=*`);
+    const mapped = predictions.map(p => ({
+      id: p.id,
+      matchId: p.match_id,
+      userId: p.username,
+      homeScore: p.home_score,
+      awayScore: p.away_score,
+      createdAt: p.created_at
+    }));
+    return { predictions: mapped };
   },
 
   savePrediction: async (matchId: string, homeScore: number, awayScore: number) => {
-    const currentUser = getStorage<AuthUser | null>(KEYS.CURRENT_USER, null);
-    if (!currentUser) throw new Error('No autenticado');
+    const savedUser = localStorage.getItem('pf_current_user');
+    if (!savedUser) throw new Error('No autenticado');
+    const currentUser = JSON.parse(savedUser);
 
-    const predictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
-    const existingIndex = predictions.findIndex(p => p.matchId === matchId && p.userId === currentUser.id);
+    const predId = `${currentUser.id}-${matchId}`;
+    await sbRequest(`predictions`, {
+      method: 'POST',
+      body: JSON.stringify({
+        id: predId,
+        username: currentUser.id,
+        match_id: matchId,
+        home_score: homeScore,
+        away_score: awayScore
+      }),
+      headers: { 'Prefer': 'resolution=merge-duplicates' }
+    });
 
-    const newPrediction: Prediction = {
-      id: `${currentUser.id}-${matchId}`,
-      matchId,
-      userId: currentUser.id,
-      homeScore,
-      awayScore,
-      createdAt: new Date().toISOString(),
+    return { 
+      prediction: { id: predId, matchId, userId: currentUser.id, homeScore, awayScore, createdAt: new Date().toISOString() } 
     };
-
-    if (existingIndex >= 0) predictions[existingIndex] = newPrediction;
-    else predictions.push(newPrediction);
-
-    setStorage(KEYS.PREDICTIONS, predictions);
-    return { prediction: newPrediction };
   },
 
   getLeaderboard: async () => {
-    const users = getStorage<Record<string, string>>(KEYS.USERS, {});
-    const matches = getStorage<Match[]>(KEYS.MATCHES, []);
-    const predictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
+    const [users, matches, allPredictions] = await Promise.all([
+      sbRequest<any[]>(`users?select=*`),
+      sbRequest<Match[]>(`matches?select=*`),
+      sbRequest<any[]>(`predictions?select=*`)
+    ]);
 
-    const leaderboard: LeaderboardRow[] = Object.keys(users)
-      .filter(username => username !== 'admin')
-      .map((username, index) => {
+    const leaderboard: LeaderboardRow[] = users
+      .filter(u => u.username !== 'admin')
+      .map((u) => {
         let points = 0;
-        const userPredictions = predictions.filter(p => p.userId === username);
+        const userPredictions = allPredictions.filter(p => p.username === u.username);
 
         userPredictions.forEach(p => {
-          const match = matches.find(m => m.id === p.matchId);
-          if (match && match.status === 'finished' && match.homeScore !== undefined && match.awayScore !== undefined) {
+          const match = matches.find(m => m.id === p.match_id);
+          if (match && match.status === 'finished' && match.homeScore !== null && match.awayScore !== null) {
             const actualHome = match.homeScore;
             const actualAway = match.awayScore;
+            const predHome = p.home_score;
+            const predAway = p.away_score;
 
-            // 3 Puntos: Marcador Exacto
-            if (p.homeScore === actualHome && p.awayScore === actualAway) {
-              points += 3;
-            } 
-            // 1 Punto: Ganador o Empate
-            else if (
-              (p.homeScore > p.awayScore && actualHome > actualAway) ||
-              (p.homeScore < p.awayScore && actualHome < actualAway) ||
-              (p.homeScore === p.awayScore && actualHome === actualAway)
-            ) {
-              points += 1;
+            let matchPoints = 0;
+            
+            // Evalúa el sistema de puntos: 10, 7, 4 y 2 puntos respectivamente
+            if (predHome === actualHome && predAway === actualAway) {
+              matchPoints = 10;
+            } else {
+              const actualWinner = actualHome > actualAway ? 'home' : actualHome < actualAway ? 'away' : 'draw';
+              const predWinner = predHome > predAway ? 'home' : predHome < predAway ? 'away' : 'draw';
+              if (actualWinner === predWinner) matchPoints = 7;
+              if (predHome === actualHome || predAway === actualAway) {
+                if (matchPoints < 4) matchPoints = 4;
+              }
+              const actualDiff = Math.abs(actualHome - actualAway);
+              const predDiff = Math.abs(predHome - predAway);
+              if (actualDiff === predDiff) {
+                if (matchPoints < 2) matchPoints = 2;
+              }
             }
+            points += matchPoints;
           }
         });
 
         return {
           rank: 0,
-          userId: username,
-          username,
+          userId: u.username,
+          username: u.full_name,
           points,
           played: userPredictions.length,
         };
       });
 
-    // Ordenar de mayor a menor puntaje
     leaderboard.sort((a, b) => b.points - a.points);
     leaderboard.forEach((row, i) => row.rank = i + 1);
-
     return { leaderboard };
   },
 
   adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
-    const matches = getStorage<Match[]>(KEYS.MATCHES, []);
-    const newMatch: Match = {
-      id: `m-${Date.now()}`,
-      homeTeam: data.homeTeam,
-      awayTeam: data.awayTeam,
-      kickoff: data.kickoff,
-      status: 'scheduled',
-    };
-    matches.push(newMatch);
-    setStorage(KEYS.MATCHES, matches);
-    return { match: newMatch };
+    const matchId = `m-${Date.now()}`;
+    await sbRequest(`matches`, {
+      method: 'POST',
+      body: JSON.stringify({
+        id: matchId,
+        home_team: data.homeTeam,
+        away_team: data.awayTeam,
+        kickoff: data.kickoff,
+        status: 'scheduled'
+      })
+    });
+    return { match: { id: matchId, homeTeam: data.homeTeam, awayTeam: data.awayTeam, kickoff: data.kickoff, status: 'scheduled' } };
   },
 
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
-    const matches = getStorage<Match[]>(KEYS.MATCHES, []);
-    const matchIndex = matches.findIndex(m => m.id === matchId);
-    if (matchIndex === -1) throw new Error('Partido no encontrado');
-
-    matches[matchIndex].status = 'finished';
-    matches[matchIndex].homeScore = homeScore;
-    matches[matchIndex].awayScore = awayScore;
-    setStorage(KEYS.MATCHES, matches);
-
-    const predictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
-    const updatedCount = predictions.filter(p => p.matchId === matchId).length;
-
-    return { match: matches[matchIndex], predictionsUpdated: updatedCount };
+    await sbRequest(`matches?id=eq.${matchId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'finished',
+        home_score: homeScore,
+        away_score: awayScore
+      })
+    });
+    return { match: {} as Match, predictionsUpdated: 1 };
   },
-    adminDeleteUser: async (usernameToDelete: string) => {
-    // 1. Cargar la lista completa de usuarios
-    const users = getStorage<Record<string, string>>(KEYS.USERS, {});
-    
-    // 2. Si existe el usuario, eliminarlo del objeto
-    if (users[usernameToDelete]) {
-      delete users[usernameToDelete];
-      setStorage(KEYS.USERS, users);
-    }
 
-    // 3. Limpiar las predicciones de ese usuario para liberar espacio
-    const allPredictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
-    const filteredPredictions = allPredictions.filter(p => p.userId !== usernameToDelete);
-    setStorage(KEYS.PREDICTIONS, filteredPredictions);
-
+  adminDeleteUser: async (usernameToDelete: string) => {
+    await sbRequest(`users?username=eq.${usernameToDelete}`, {
+      method: 'DELETE'
+    });
     return { success: true };
   }
-
 };
