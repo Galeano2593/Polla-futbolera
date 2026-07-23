@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import type { Match, Prediction } from '@/types';
 import { Calendar, Save, CheckCircle } from 'lucide-react';
+import LoadingSoccer from '@/components/LoadingSoccer';
 
 export default function PredictionsView() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -9,6 +10,7 @@ export default function PredictionsView() {
   const [scores, setScores] = useState<Record<string, { home: string; away: string }>>({});
   const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -43,6 +45,7 @@ export default function PredictionsView() {
     const matchScore = scores[matchId];
     if (!matchScore || matchScore.home === '' || matchScore.away === '') return;
 
+    setIsSaving(true);
     try {
       await api.savePrediction(
         matchId,
@@ -52,6 +55,8 @@ export default function PredictionsView() {
       setSavedStatus((prev) => ({ ...prev, [matchId]: true }));
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -68,11 +73,7 @@ export default function PredictionsView() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh] text-slate-400">
-        Cargando partidos de la fecha...
-      </div>
-    );
+    return <LoadingSoccer message="Cargando partidos de la fecha..." />;
   }
 
   return (
@@ -115,14 +116,11 @@ export default function PredictionsView() {
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                {/* Equipos e Inputs */}
                 <div className="flex flex-1 items-center justify-center gap-4 w-full">
-                  {/* Local */}
                   <div className="flex-1 text-right font-semibold text-sm sm:text-base text-slate-100 truncate">
                     {match.homeTeam}
                   </div>
 
-                  {/* Bloque de Marcador */}
                   <div className="flex items-center gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
                     <input
                       type="text"
@@ -147,13 +145,11 @@ export default function PredictionsView() {
                     />
                   </div>
 
-                  {/* Visitante */}
                   <div className="flex-1 text-left font-semibold text-sm sm:text-base text-slate-100 truncate">
                     {match.awayTeam}
                   </div>
                 </div>
 
-                {/* Botón de Guardar */}
                 {match.status !== 'finished' && (
                   <button
                     onClick={() => handleSave(match.id)}
@@ -180,7 +176,6 @@ export default function PredictionsView() {
                   </button>
                 )}
 
-                {/* Resultado Real (Si ya finalizó) */}
                 {match.status === 'finished' && (
                   <div className="bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-medium text-slate-300">
                     Resultado: <span className="text-yellow-400 font-bold">{match.homeScore} - {match.awayScore}</span>
@@ -191,7 +186,9 @@ export default function PredictionsView() {
           );
         })}
       </div>
+
+      {/* Balón animado flotante al guardar la predicción */}
+      {isSaving && <LoadingSoccer message="Guardando tu pronóstico..." />}
     </div>
   );
 }
-
