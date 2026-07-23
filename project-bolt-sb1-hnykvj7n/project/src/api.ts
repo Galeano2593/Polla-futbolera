@@ -193,6 +193,7 @@ export const api = {
     return { match: { id: matchId, homeTeam: data.homeTeam, awayTeam: data.awayTeam, kickoff: data.kickoff, status: 'scheduled' } };
   },
 
+
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
       method: 'PATCH',
@@ -202,8 +203,9 @@ export const api = {
         away_score: awayScore
       })
     });
-    return { match: {} as Match, predictionsUpdated: 1 };
+    return { match: { id: matchId, homeTeam: '', awayTeam: '', kickoff: '', status: 'finished', homeScore, awayScore }, predictionsUpdated: 1 };
   },
+
 
   adminDeleteUser: async (usernameToDelete: string) => {
     await sbRequest(`users?username=eq.${usernameToDelete}`, {
