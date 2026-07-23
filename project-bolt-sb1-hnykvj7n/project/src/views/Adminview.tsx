@@ -25,19 +25,44 @@ export default function AdminView() {
 
   useEffect(() => { loadMatches(); }, []);
 
-  async function handleCreateMatch(e: React.FormEvent) {
+    async function handleCreateMatch(e: React.FormEvent) {
     e.preventDefault();
     if (!homeTeam.trim() || !awayTeam.trim() || !kickoff) return;
-    setBusy(true); setError(''); setSuccess('');
+
+    setBusy(true);
+    setError('');
+    setSuccess('');
+    
     try {
-      const datePart = kickoff.replace('T', ' ');
-      const formattedDate = datePart.length === 16 ? `${datePart}:00-05` : `${datePart}-05`;
-      await api.adminCreateMatch({ homeTeam: homeTeam.trim(), awayTeam: awayTeam.trim(), kickoff: formattedDate });
-      setHomeTeam(''); setAwayTeam(''); setKickoff('');
+      // 🇨🇴 Convertir de forma segura cualquier selección del navegador al formato militar ISO de Supabase (YYYY-MM-DD HH:MM:SS-05)
+      const localDate = new Date(kickoff);
+      
+      const year = localDate.getFullYear();
+      const month = String(localDate.getMonth() + 1).padStart(2, '0');
+      const day = String(localDate.getDate()).padStart(2, '0');
+      const hours = String(localDate.getHours()).padStart(2, '0');
+      const minutes = String(localDate.getMinutes()).padStart(2, '0');
+      
+      const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:00-05`;
+
+      await api.adminCreateMatch({
+        homeTeam: homeTeam.trim(),
+        awayTeam: awayTeam.trim(),
+        kickoff: formattedDate,
+      });
+
+      setHomeTeam('');
+      setAwayTeam('');
+      setKickoff('');
       setSuccess('¡Partido registrado con éxito!');
       await loadMatches();
-    } catch (err) { setError('Error al registrar el partido'); } finally { setBusy(false); }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al registrar el partido');
+    } finally {
+      setBusy(false);
+    }
   }
+
 
   async function handleSetResult(matchId: string) {
     const res = results[matchId];
