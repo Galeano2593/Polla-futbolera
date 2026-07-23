@@ -1,329 +1,224 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import type { Match } from '@/types';
-import { ShieldCheck, Plus, Trophy, Clock } from 'lucide-react';
-
-type Tab = 'matches' | 'results';
+import { PlusCircle, Calendar, Check, AlertCircle } from 'lucide-react';
+import LoadingSoccer from '@/components/LoadingSoccer';
 
 export default function AdminView() {
-  const [tab, setTab] = useState<Tab>('matches');
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  // Estados del Formulario de Creación (Forzados con texto legible)
+  const [homeTeam, setHomeTeam] = useState('');
+  const [awayTeam, setAwayTeam] = useState('');
+  const [kickoff, setKickoff] = useState('');
+
+  // Estados para cargar resultados reales
+  const [results, setResults] = useState<Record<string, { home: string; away: string }>>({});
 
   async function loadMatches() {
-    setLoading(true);
     try {
-      const { matches } = await api.getMatches();
-      setMatches(matches);
+      const res = await api.getMatches();
+      setMatches(res.matches);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    void loadMatches();
+    loadMatches();
   }, []);
 
-  return (
-    <div className="max-w-3xl mx-auto px-4 py-6">
-      <div className="mb-6 flex items-center gap-3">
-        <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-slate-900">
-          <ShieldCheck className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Panel de Administrador</h1>
-          <p className="text-slate-500 text-sm">Gestiona partidos y resultados</p>
-        </div>
-      </div>
-
-      <div className="flex gap-2 p-1 bg-slate-100 rounded-xl mb-6">
-        <button
-          onClick={() => setTab('matches')}
-          className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-            tab === 'matches' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-          }`}
-        >
-          Crear Partido
-        </button>
-        <button
-          onClick={() => setTab('results')}
-          className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-            tab === 'results' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-          }`}
-        >
-          Cargar Resultados
-        </button>
-      </div>
-
-      {msg && (
-        <div
-          className={`mb-4 text-sm rounded-xl px-4 py-3 ${
-            msg.type === 'ok'
-              ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
-              : 'text-red-700 bg-red-50 border border-red-200'
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
-
-      {tab === 'matches' ? (
-        <CreateMatchForm
-          onCreated={() => {
-            setMsg({ type: 'ok', text: 'Partido creado correctamente' });
-            void loadMatches();
-          }}
-          onError={(t) => setMsg({ type: 'err', text: t })}
-        />
-      ) : (
-        <ResultsForm
-          matches={matches}
-          loading={loading}
-          onDone={() => {
-            setMsg({ type: 'ok', text: 'Resultado cargado y puntos calculados' });
-            void loadMatches();
-          }}
-          onError={(t) => setMsg({ type: 'err', text: t })}
-        />
-      )}
-
-      {/* Match list */}
-      <div className="mt-8">
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">
-          Partidos ({matches.length})
-        </h2>
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {matches.map((m) => (
-              <div
-                key={m.id}
-                className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium text-slate-900 text-sm truncate">
-                    {m.homeTeam} vs {m.awayTeam}
-                  </p>
-                  <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                    <Clock className="w-3 h-3" />
-                    {new Date(m.kickoff).toLocaleString('es', {
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {m.status === 'finished' ? (
-                    <span className="text-sm font-bold text-slate-900">
-                      {m.homeScore} - {m.awayScore}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-400">Sin resultado</span>
-                  )}
-                  {m.status === 'finished' && (
-                    <Trophy className="w-4 h-4 text-emerald-500" />
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CreateMatchForm({
-  onCreated,
-  onError,
-}: {
-  onCreated: () => void;
-  onError: (text: string) => void;
-}) {
-  const [homeTeam, setHomeTeam] = useState('');
-  const [awayTeam, setAwayTeam] = useState('');
-  const [kickoff, setKickoff] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
+  async function handleCreateMatch(e: React.FormEvent) {
     e.preventDefault();
+    if (!homeTeam || !awayTeam || !kickoff) return;
+
     setBusy(true);
+    setError('');
     try {
-      const iso = new Date(kickoff).toISOString();
-      await api.adminCreateMatch({ homeTeam, awayTeam, kickoff: iso });
+      await api.adminCreateMatch({
+        homeTeam: homeTeam.trim(),
+        awayTeam: awayTeam.trim(),
+        kickoff: new Date(kickoff).toISOString(),
+      });
       setHomeTeam('');
       setAwayTeam('');
       setKickoff('');
-      onCreated();
+      await loadMatches();
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'Error');
+      setError('Error al crear el partido');
     } finally {
       setBusy(false);
     }
   }
 
-  return (
-    <form
-      onSubmit={submit}
-      className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4"
-    >
-      <div className="flex items-center gap-2 text-slate-700 font-medium">
-        <Plus className="w-4 h-4" />
-        Nuevo partido
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">
-            Equipo Local
-          </label>
-          <input
-            value={homeTeam}
-            onChange={(e) => setHomeTeam(e.target.value)}
-            required
-            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">
-            Equipo Visitante
-          </label>
-          <input
-            value={awayTeam}
-            onChange={(e) => setAwayTeam(e.target.value)}
-            required
-            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-          />
-        </div>
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-slate-500 mb-1">
-          Fecha y hora
-        </label>
-        <input
-          type="datetime-local"
-          value={kickoff}
-          onChange={(e) => setKickoff(e.target.value)}
-          required
-          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-        />
-      </div>
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium transition disabled:opacity-50"
-      >
-        {busy ? 'Creando…' : 'Crear partido'}
-      </button>
-    </form>
-  );
-}
+  async function handleSetResult(matchId: string) {
+    const res = results[matchId];
+    if (!res || res.home === '' || res.away === '') return;
 
-function ResultsForm({
-  matches,
-  loading,
-  onDone,
-  onError,
-}: {
-  matches: Match[];
-  loading: boolean;
-  onDone: () => void;
-  onError: (text: string) => void;
-}) {
-  const [matchId, setMatchId] = useState('');
-  const [home, setHome] = useState('');
-  const [away, setAway] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!matchId || home === '' || away === '') return;
     setBusy(true);
     try {
-      await api.adminSetResult(matchId, Number(home), Number(away));
-      setMatchId('');
-      setHome('');
-      setAway('');
-      onDone();
+      await api.adminSetResult(matchId, parseInt(res.home, 10), parseInt(res.away, 10));
+      await loadMatches();
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'Error');
+      console.error(err);
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) return null;
+  function handleResultChange(matchId: string, side: 'home' | 'away', value: string) {
+    if (value !== '' && !/^\d+$/.test(value)) return;
+    setResults((prev) => ({
+      ...prev,
+      [matchId]: {
+        ...prev[matchId],
+        [side]: value,
+      },
+    }));
+  }
+
+  if (loading) {
+    return <LoadingSoccer message="Cargando panel de control Dimayor..." />;
+  }
 
   return (
-    <form
-      onSubmit={submit}
-      className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4"
-    >
-      <div className="flex items-center gap-2 text-slate-700 font-medium">
-        <Trophy className="w-4 h-4" />
-        Cargar resultado final
+    <div className="space-y-8 max-w-2xl mx-auto mb-12 text-slate-200">
+      <div className="text-center sm:text-left mb-2">
+        <h2 className="text-2xl font-bold text-white tracking-tight">Panel de Administrador</h2>
+        <p className="text-slate-400 text-sm mt-1">Gestiona los partidos y carga los resultados oficiales de la Liga BetPlay</p>
       </div>
-      <div>
-        <label className="block text-xs font-medium text-slate-500 mb-1">
-          Partido
-        </label>
-        <select
-          value={matchId}
-          onChange={(e) => setMatchId(e.target.value)}
-          required
-          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-        >
-          <option value="">Selecciona un partido…</option>
-          {matches.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.homeTeam} vs {m.awayTeam} —{' '}
-              {new Date(m.kickoff).toLocaleDateString('es')}
-            </option>
-          ))}
-        </select>
+
+      {/* SECCIÓN 1: FORMULARIO DE CREAR PARTIDO */}
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-6 shadow-2xl space-y-4">
+        <h3 className="text-lg font-semibold text-yellow-400 flex items-center gap-2">
+          <PlusCircle className="w-5 h-5" /> Crear Nuevo Partido
+        </h3>
+
+        <form onSubmit={handleCreateMatch} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">
+                Equipo Local
+              </label>
+              <input
+                type="text"
+                value={homeTeam}
+                onChange={(e) => setHomeTeam(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition font-medium"
+                placeholder="Ej: Atlético Nacional"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">
+                Equipo Visitante
+              </label>
+              <input
+                type="text"
+                value={awayTeam}
+                onChange={(e) => setAwayTeam(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition font-medium"
+                placeholder="Ej: Millonarios FC"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">
+              Fecha y Hora del Partido (Kickoff)
+            </label>
+            <input
+              type="datetime-local"
+              value={kickoff}
+              onChange={(e) => setKickoff(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition font-medium scheme-dark"
+              required
+            />
+          </div>
+
+          {error && (
+            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" /> {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full py-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold transition-all shadow-lg shadow-yellow-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <span>Registrar Partido en la Nube</span>
+          </button>
+        </form>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">
-            Goles Local
-          </label>
-          <input
-            type="number"
-            min={0}
-            max={99}
-            value={home}
-            onChange={(e) => setHome(e.target.value)}
-            required
-            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-          />
+
+      {/* SECCIÓN 2: CARGAR RESULTADOS REALES */}
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-6 shadow-2xl space-y-4">
+        <h3 className="text-lg font-semibold text-emerald-400 flex items-center gap-2">
+          <Calendar className="w-5 h-5" /> Cargar Resultados Oficiales
+        </h3>
+
+        <div className="divide-y divide-slate-800/60 space-y-4">
+          {matches.filter(m => m.status !== 'finished').length === 0 ? (
+            <div className="text-center py-4 text-slate-500 text-sm">
+              No hay partidos abiertos pendientes por marcador.
+            </div>
+          ) : (
+            matches
+              .filter((m) => m.status !== 'finished')
+              .map((match) => {
+                const hasInputResult = results[match.id]?.home !== '' && results[match.id]?.away !== '';
+                
+                return (
+                  <div key={match.id} className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex flex-1 items-center justify-center gap-3 w-full">
+                      <span className="flex-1 text-right text-sm font-semibold text-slate-200 truncate">{match.homeTeam}</span>
+                      
+                      {/* Inputs de marcador Real Forzados con Letra Negra */}
+                      <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-lg border border-slate-800">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={results[match.id]?.home ?? ''}
+                          onChange={(e) => handleResultChange(match.id, 'home', e.target.value)}
+                          className="w-9 h-9 text-center bg-white text-black border border-slate-300 rounded-md text-base font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          placeholder="0"
+                        />
+                        <span className="text-slate-600 font-bold">:</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={results[match.id]?.away ?? ''}
+                          onChange={(e) => handleResultChange(match.id, 'away', e.target.value)}
+                          className="w-9 h-9 text-center bg-white text-black border border-slate-300 rounded-md text-base font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      <span className="flex-1 text-left text-sm font-semibold text-slate-200 truncate">{match.awayTeam}</span>
+                    </div>
+
+                    <button
+                      onClick={() => handleSetResult(match.id)}
+                      disabled={!hasInputResult || busy}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold transition-all bg-emerald-500 hover:bg-emerald-400 text-white disabled:opacity-40 flex items-center justify-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Cerrar y Calcular Puntos
+                    </button>
+                  </div>
+                );
+              })
+          )}
         </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">
-            Goles Visitante
-          </label>
-          <input
-            type="number"
-            min={0}
-            max={99}
-            value={away}
-            onChange={(e) => setAway(e.target.value)}
-            required
-            className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-          />
-        </div>
       </div>
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition disabled:opacity-50"
-      >
-        {busy ? 'Guardando…' : 'Cargar resultado y calcular puntos'}
-      </button>
-    </form>
+
+      {busy && <LoadingSoccer message="Guardando cambios en la base de datos..." />}
+    </div>
   );
 }
