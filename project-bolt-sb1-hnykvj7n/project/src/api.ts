@@ -178,19 +178,32 @@ export const api = {
     return { leaderboard };
   },
 
-  adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
+   adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
     const matchId = `m-${Date.now()}`;
+    
+    // Convertir la fecha del formulario al formato exacto que exige Supabase (YYYY-MM-DD HH:MM:SS)
+    const formattedKickoff = data.kickoff.replace('T', ' ') + ':00';
+
     await sbRequest(`matches`, {
       method: 'POST',
       body: JSON.stringify({
         id: matchId,
-        home_team: data.homeTeam,
-        away_team: data.awayTeam,
-        kickoff: data.kickoff,
+        home_team: data.homeTeam.trim(),
+        away_team: data.awayTeam.trim(),
+        kickoff: formattedKickoff,
         status: 'scheduled'
       })
     });
-    return { match: { id: matchId, homeTeam: data.homeTeam, awayTeam: data.awayTeam, kickoff: data.kickoff, status: 'scheduled' } };
+    
+    return { 
+      match: { 
+        id: matchId, 
+        homeTeam: data.homeTeam, 
+        awayTeam: data.awayTeam, 
+        kickoff: data.kickoff, 
+        status: 'scheduled' 
+      } 
+    };
   },
 
 
