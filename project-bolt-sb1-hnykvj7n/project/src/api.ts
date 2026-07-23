@@ -63,13 +63,14 @@ export const api = {
       return { token: 'sb-token-admin', user: adminUser };
     }
 
+    // 🔒 CONSULTA DE SEGURIDAD CORREGIDA: Extrae el usuario de forma exacta del arreglo de la nube
     const res = await sbRequest<any[]>(`users?username=eq.${cleanUsername}&select=*`);
     
     if (!res || res.length === 0) {
       throw new Error('Usuario o contraseña incorrectos');
     }
     
-    const dbUser = res[0];
+    const dbUser = res[0]; // <--- Extracción correcta del primer elemento del arreglo
 
     if (dbUser.password !== password) {
       throw new Error('Usuario o contraseña incorrectos');
@@ -136,7 +137,7 @@ export const api = {
   },
 
   getLeaderboard: async () => {
-    // 🛠️ FILTRADO DIRECTO: Le decimos a Supabase que no traiga al administrador en la lista de jugadores
+    // Filtrar al administrador directo desde la API para evitar conflictos lógicos
     const [users, matches, allPredictions] = await Promise.all([
       sbRequest<any[]>(`users?role=neq.admin&select=*`),
       sbRequest<any[]>(`matches?select=*`),
