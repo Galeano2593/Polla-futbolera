@@ -1,19 +1,37 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
-import type { LeaderboardRow } from '@/types';
-import { Trophy, User, Hash, Star, Trash2 } from 'lucide-react';
+import type { LeaderboardRow, Match, Prediction } from '@/types';
+import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
-export default function LeaderboardView() {
-  const { user } = useAuth(); // Identificar si el usuario actual es admin
-  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
-  const [loading, setLoading] = useState(true);
+// Ayudante local para leer LocalStorage de forma segura
+function getStorage<T>(key: string, fallback: T): T {
+  const data = localStorage.getItem(key);
+  return data ? JSON.parse(data) : fallback;
+}
 
-  async function loadLeaderboard() {
+export default function LeaderboardView() {
+  const { user } = useAuth();
+  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Estado para controlar qué usuario tiene el desplegable de partidos abierto
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+
+  async function loadData() {
     try {
       const res = await api.getLeaderboard();
       setLeaderboard(res.leaderboard);
+      
+      // Cargamos los partidos y predicciones globales directo para cruzar datos de auditoría
+      const mRes = await api.getMatches();
+      setMatches(mRes.matches);
+      
+      const preds = getStorage<Prediction[]>('pf_predictions', []);
+      setAllPredictions(preds);
     } catch (err) {
       console.error(err);
     } finally {
@@ -22,7 +40,7 @@ export default function LeaderboardView() {
   }
 
   useEffect(() => {
-    loadLeaderboard();
+    loadData();
   }, []);
 
   async function handleDeleteUser(usernameToDelete: string) {
@@ -33,7 +51,7 @@ export default function LeaderboardView() {
     try {
       // @ts-ignore
       await api.adminDeleteUser(usernameToDelete);
-      await loadLeaderboard(); // Recargar la tabla actualizada
+      await loadData();
     } catch (err) {
       console.error(err);
     } finally {
@@ -41,12 +59,16 @@ export default function LeaderboardView() {
     }
   }
 
+  function toggleExpandUser(username: string) {
+    setExpandedUser(expandedUser === username ? null : username);
+  }
+
   if (loading) {
     return <LoadingSoccer message="Actualizando posiciones de la polla..." />;
   }
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-6 max-w-2xl mx-auto mb-12">
       <div className="text-center sm:text-left mb-2">
         <h2 className="text-2xl font-bold text-white tracking-tight">Tabla de Posiciones</h2>
         <p className="text-slate-400 text-sm mt-1">Ranking global de competidores de la Liga BetPlay</p>
@@ -61,60 +83,106 @@ export default function LeaderboardView() {
           <div className="divide-y divide-slate-800/60">
             {leaderboard.map((row) => {
               const isCurrentUser = user?.username === row.username;
-              
+              const isExpanded = expandedUser === row.username;
+
+              // Filtrar predicciones de ESTE usuario específico
+              const userPreds = allPredictions.filter(p => p.userId === row.username);
+
               return (
-                <div
-                  key={row.userId}
-                  className={`flex items-center justify-between p-4 transition-colors ${
-                    isCurrentUser ? 'bg-emerald-500/10' : 'hover:bg-slate-800/30'
-                  }`}
-                >
-                  {/* Puesto y Nombre */}
-                  <div className="flex items-center gap-4">
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
-                      row.rank === 1 
-                        ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' 
-                        : row.rank === 2 
-                          ? 'bg-slate-400/20 text-slate-300 border border-slate-400/30'
-                          : row.rank === 3
-                            ? 'bg-amber-700/20 text-amber-500 border border-amber-700/30'
-                            : 'bg-slate-950 text-slate-400 border border-slate-800'
-                    }`}>
-                      {row.rank === 1 ? <Star className="w-4 h-4 fill-yellow-400/20" /> : row.rank}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <User className={`w-4 h-4 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-500'}`} />
-                      <span className={`text-sm font-semibold ${isCurrentUser ? 'text-emerald-400' : 'text-slate-200'}`}>
-                        {row.username} {isCurrentUser && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-1">Tú</span>}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Puntaje y Botón Eliminar */}
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <div className="text-sm font-bold text-white flex items-center gap-1 justify-end">
-                        <Trophy className="w-3.5 h-3.5 text-yellow-400" />
-                        {row.points} <span className="text-xs font-normal text-slate-400">pts</span>
+                <div key={row.userId} className="flex flex-col">
+                  {/* Fila Principal de Información */}
+                  <div
+                    className={`flex items-center justify-between p-4 transition-colors cursor-pointer ${
+                      isCurrentUser ? 'bg-emerald-500/10' : 'hover:bg-slate-800/30'
+                    }`}
+                    onClick={() => toggleExpandUser(row.username)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
+                        row.rank === 1 
+                          ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' 
+                          : row.rank === 2 
+                            ? 'bg-slate-400/20 text-slate-300 border border-slate-400/30'
+                            : row.rank === 3
+                              ? 'bg-amber-700/20 text-amber-500 border border-amber-700/30'
+                              : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      }`}>
+                        {row.rank === 1 ? <Star className="w-4 h-4 fill-yellow-400/20" /> : row.rank}
                       </div>
-                      <div className="text-[10px] text-slate-500 flex items-center gap-0.5 justify-end mt-0.5">
-                        <Hash className="w-2.5 h-2.5" />
-                        {row.played} jugados
+
+                      <div className="flex items-center gap-2">
+                        <User className={`w-4 h-4 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-500'}`} />
+                        <span className={`text-sm font-semibold ${isCurrentUser ? 'text-emerald-400' : 'text-slate-200'}`}>
+                          {row.username} {isCurrentUser && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-1">Tú</span>}
+                        </span>
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
                       </div>
                     </div>
 
-                    {/* Botón de eliminación visible SOLO para el admin */}
-                    {user?.role === 'admin' && (
-                      <button
-                        onClick={() => handleDeleteUser(row.username)}
-                        className="text-slate-500 hover:text-red-400 p-2 rounded-xl hover:bg-red-500/10 transition-colors"
-                        title={`Eliminar a ${row.username}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-white flex items-center gap-1 justify-end">
+                          <Trophy className="w-3.5 h-3.5 text-yellow-400" />
+                          {row.points} <span className="text-xs font-normal text-slate-400">pts</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 flex items-center gap-0.5 justify-end mt-0.5">
+                          <Hash className="w-2.5 h-2.5" />
+                          {row.played} jugados
+                        </div>
+                      </div>
+
+                      {user?.role === 'admin' && (
+                        <button
+                          onClick={() => handleDeleteUser(row.username)}
+                          className="text-slate-500 hover:text-red-400 p-2 rounded-xl hover:bg-red-500/10 transition-colors"
+                          title={`Eliminar a ${row.username}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Panel Desplegable: Pronósticos Auditables del Usuario */}
+                  {isExpanded && (
+                    <div className="bg-slate-950/50 px-4 pb-4 pt-1 border-t border-slate-900 flex flex-col gap-2 animate-fadeIn">
+                      <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase flex items-center gap-1 mb-1">
+                        <Eye className="w-3 h-3 text-emerald-400" /> Pronósticos visibles (Partidos cerrados o finalizados)
+                      </div>
+                      
+                      {matches.map(match => {
+                        // REGLA DE TIEMPO: El partido ya empezó o finalizó
+                        const isMatchClosed = new Date(match.kickoff) <= new Date() || match.status === 'finished';
+                        
+                        // Buscar si este usuario le apostó a este partido
+                        const pred = userPreds.find(p => p.matchId === match.id);
+
+                        if (!isMatchClosed && !isCurrentUser) {
+                          // Si el partido está abierto y no soy yo mismo, ocultar información para evitar copias
+                          return (
+                            <div key={match.id} className="flex justify-between items-center text-xs bg-slate-900/20 p-2 rounded-xl border border-slate-800/40 text-slate-600 italic">
+                              <span>{match.homeTeam} vs {match.awayTeam}</span>
+                              <span className="text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-500 font-normal">Oculto hasta el silbatazo</span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={match.id} className="flex justify-between items-center text-xs bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/50">
+                            <span className="font-medium text-slate-300 w-1/3 truncate text-left">{match.homeTeam}</span>
+                            
+                            <div className="flex items-center gap-2 justify-center w-1/3">
+                              <span className="bg-slate-950 text-emerald-400 font-bold px-2 py-0.5 rounded border border-slate-800 text-sm">
+                                {pred ? `${pred.homeScore} - ${pred.awayScore}` : 'N/A'}
+                              </span>
+                            </div>
+
+                            <span className="font-medium text-slate-300 w-1/3 truncate text-right">{match.awayTeam}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -124,4 +192,3 @@ export default function LeaderboardView() {
     </div>
   );
 }
-
