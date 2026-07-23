@@ -1,66 +1,177 @@
 import type { AuthUser, Match, Prediction, LeaderboardRow } from '@/types';
 
-const BASE = '/api';
+// Claves para LocalStorage
+const KEYS = {
+  USERS: 'pf_users',
+  CURRENT_USER: 'pf_current_user',
+  TOKEN: 'pf_token',
+  MATCHES: 'pf_matches',
+  PREDICTIONS: 'pf_predictions',
+};
 
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('pf_token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+// --- AYUDANTES DE PERSISTENCIA ---
+function getStorage<T>(key: string, fallback: T): T {
+  const data = localStorage.getItem(key);
+  return data ? JSON.parse(data) : fallback;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-      ...options.headers,
-    },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((data as { error?: string }).error ?? 'Error de red');
-  }
-  return data as T;
+function setStorage<T>(key: string, data: T): void {
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+// --- DATOS SEMILLA (FECHA 1 LIGA BETPLAY 2026-II) ---
+const INITIAL_MATCHES: Match[] = [
+  { id: 'm1', homeTeam: 'Llaneros', awayTeam: 'Deportivo Pereira', kickoff: '2026-07-24T16:00:00Z', status: 'scheduled' },
+  { id: 'm2', homeTeam: 'Deportivo Cali', awayTeam: 'Jaguares FC', kickoff: '2026-07-24T18:15:00Z', status: 'scheduled' },
+  { id: 'm3', homeTeam: 'Millonarios FC', awayTeam: 'Atlético Bucaramanga', kickoff: '2026-07-25T14:00:00Z', status: 'scheduled' },
+  { id: 'm4', homeTeam: 'Independiente Medellín', awayTeam: 'Deportivo Pasto', kickoff: '2026-07-25T16:15:00Z', status: 'scheduled' }
+];
+
+// Inicializar partidos si no existen
+if (!localStorage.getItem(KEYS.MATCHES)) {
+  setStorage(KEYS.MATCHES, INITIAL_MATCHES);
 }
 
 export const api = {
-  register: (username: string, password: string) =>
-    request<{ token: string; user: AuthUser }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    }),
+  register: async (username: string, password: string) => {
+    const users = getStorage<Record<string, string>>(KEYS.USERS, {});
+    if (users[username]) throw new Error('El usuario ya existe');
+    
+    users[username] = password;
+    setStorage(KEYS.USERS, users);
 
-  login: (username: string, password: string) =>
-    request<{ token: string; user: AuthUser }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    }),
+    const user: AuthUser = { id: username, username, role: username === 'admin' ? 'admin' : 'user' };
+    setStorage(KEYS.CURRENT_USER, user);
+    localStorage.setItem(KEYS.TOKEN, `mock-token-${username}`);
 
-  getMatches: () => request<{ matches: Match[] }>('/matches'),
+    return { token: `mock-token-${username}`, user };
+  },
 
-  getPredictions: () => request<{ predictions: Prediction[] }>('/predictions'),
+  login: async (username: string, password: string) => {
+    const users = getStorage<Record<string, string>>(KEYS.USERS, { admin: 'admin123' });
+    if (!users[username] || users[username] !== password) {
+      throw new Error('Usuario o contraseña incorrectos');
+    }
 
-  savePrediction: (matchId: string, homeScore: number, awayScore: number) =>
-    request<{ prediction: Prediction }>('/predictions', {
-      method: 'POST',
-      body: JSON.stringify({ matchId, homeScore, awayScore }),
-    }),
+    const user: AuthUser = { id: username, username, role: username === 'admin' ? 'admin' : 'user' };
+    setStorage(KEYS.CURRENT_USER, user);
+    localStorage.setItem(KEYS.TOKEN, `mock-token-${username}`);
 
-  getLeaderboard: () => request<{ leaderboard: LeaderboardRow[] }>('/leaderboard'),
+    return { token: `mock-token-${username}`, user };
+  },
 
-  adminCreateMatch: (data: {
-    homeTeam: string;
-    awayTeam: string;
-    kickoff: string;
-  }) =>
-    request<{ match: Match }>('/admin/matches', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  getMatches: async () => {
+    const matches = getStorage<Match[]>(KEYS.MATCHES, []);
+    return { matches };
+  },
 
-  adminSetResult: (matchId: string, homeScore: number, awayScore: number) =>
-    request<{ match: Match; predictionsUpdated: number }>('/admin/results', {
-      method: 'POST',
-      body: JSON.stringify({ matchId, homeScore, awayScore }),
-    }),
+  getPredictions: async () => {
+    const currentUser = getStorage<AuthUser | null>(KEYS.CURRENT_USER, null);
+    if (!currentUser) throw new Error('No autenticado');
+
+    const allPredictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
+    const predictions = allPredictions.filter(p => p.userId === currentUser.id);
+    return { predictions };
+  },
+
+  savePrediction: async (matchId: string, homeScore: number, awayScore: number) => {
+    const currentUser = getStorage<AuthUser | null>(KEYS.CURRENT_USER, null);
+    if (!currentUser) throw new Error('No autenticado');
+
+    const predictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
+    const existingIndex = predictions.findIndex(p => p.matchId === matchId && p.userId === currentUser.id);
+
+    const newPrediction: Prediction = {
+      id: `${currentUser.id}-${matchId}`,
+      matchId,
+      userId: currentUser.id,
+      homeScore,
+      awayScore,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (existingIndex >= 0) predictions[existingIndex] = newPrediction;
+    else predictions.push(newPrediction);
+
+    setStorage(KEYS.PREDICTIONS, predictions);
+    return { prediction: newPrediction };
+  },
+
+  getLeaderboard: async () => {
+    const users = getStorage<Record<string, string>>(KEYS.USERS, {});
+    const matches = getStorage<Match[]>(KEYS.MATCHES, []);
+    const predictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
+
+    const leaderboard: LeaderboardRow[] = Object.keys(users)
+      .filter(username => username !== 'admin')
+      .map((username, index) => {
+        let points = 0;
+        const userPredictions = predictions.filter(p => p.userId === username);
+
+        userPredictions.forEach(p => {
+          const match = matches.find(m => m.id === p.matchId);
+          if (match && match.status === 'finished' && match.homeScore !== undefined && match.awayScore !== undefined) {
+            const actualHome = match.homeScore;
+            const actualAway = match.awayScore;
+
+            // 3 Puntos: Marcador Exacto
+            if (p.homeScore === actualHome && p.awayScore === actualAway) {
+              points += 3;
+            } 
+            // 1 Punto: Ganador o Empate
+            else if (
+              (p.homeScore > p.awayScore && actualHome > actualAway) ||
+              (p.homeScore < p.awayScore && actualHome < actualAway) ||
+              (p.homeScore === p.awayScore && actualHome === actualAway)
+            ) {
+              points += 1;
+            }
+          }
+        });
+
+        return {
+          rank: 0,
+          userId: username,
+          username,
+          points,
+          played: userPredictions.length,
+        };
+      });
+
+    // Ordenar de mayor a menor puntaje
+    leaderboard.sort((a, b) => b.points - a.points);
+    leaderboard.forEach((row, i) => row.rank = i + 1);
+
+    return { leaderboard };
+  },
+
+  adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
+    const matches = getStorage<Match[]>(KEYS.MATCHES, []);
+    const newMatch: Match = {
+      id: `m-${Date.now()}`,
+      homeTeam: data.homeTeam,
+      awayTeam: data.awayTeam,
+      kickoff: data.kickoff,
+      status: 'scheduled',
+    };
+    matches.push(newMatch);
+    setStorage(KEYS.MATCHES, matches);
+    return { match: newMatch };
+  },
+
+  adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
+    const matches = getStorage<Match[]>(KEYS.MATCHES, []);
+    const matchIndex = matches.findIndex(m => m.id === matchId);
+    if (matchIndex === -1) throw new Error('Partido no encontrado');
+
+    matches[matchIndex].status = 'finished';
+    matches[matchIndex].homeScore = homeScore;
+    matches[matchIndex].awayScore = awayScore;
+    setStorage(KEYS.MATCHES, matches);
+
+    const predictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
+    const updatedCount = predictions.filter(p => p.matchId === matchId).length;
+
+    return { match: matches[matchIndex], predictionsUpdated: updatedCount };
+  },
 };
