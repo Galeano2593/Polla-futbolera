@@ -43,7 +43,6 @@ export default function AdminView() {
     setSuccess('');
     
     try {
-      // 🇨🇴 Formatear la fecha datetime-local de HTML al estándar estricto de Supabase: YYYY-MM-DD HH:MM:SS-05
       const datePart = kickoff.replace('T', ' ');
       const formattedDate = datePart.length === 16 ? `${datePart}:00-05` : `${datePart}-05`;
 
@@ -53,7 +52,6 @@ export default function AdminView() {
         kickoff: formattedDate,
       });
 
-      // Limpiar casillas tras el registro exitoso
       setHomeTeam('');
       setAwayTeam('');
       setKickoff('');
@@ -106,14 +104,14 @@ export default function AdminView() {
         <p className="text-slate-400 text-sm mt-1">Crea partidos de la Liga BetPlay y carga los resultados oficiales</p>
       </div>
 
-      {/* LETREROS GLOBALES DE ALERTA O ÉXITO */}
       {error && (
-        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-2 animate-fadeIn">
+        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" /> <span>{error}</span>
         </div>
       )}
+      
       {success && (
-        <div className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 flex items-center gap-2 animate-fadeIn">
+        <div className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
           <Check className="w-4 h-4 shrink-0" /> <span>{success}</span>
         </div>
       )}
@@ -184,6 +182,7 @@ export default function AdminView() {
             <Calendar className="w-5 h-5" /> Cargar Resultados Oficiales
           </h3>
           <button 
+            type="button"
             onClick={loadMatches}
             className="p-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
             title="Refrescar partidos"
@@ -208,7 +207,6 @@ export default function AdminView() {
                     <div className="flex flex-1 items-center justify-center gap-3 w-full">
                       <span className="flex-1 text-right text-sm font-semibold text-slate-100 truncate">{match.homeTeam}</span>
                       
-                      {/* Casillas de texto forzadas en fondo Blanco y Letras Negras */}
                       <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
                         <input
                           type="text"
@@ -229,4 +227,9 @@ export default function AdminView() {
                         />
                       </div>
 
+                      <span className="flex-1 text-left text-sm font-semibold text-slate-100 truncate">{match.awayTeam}</span>
+                    </div>
 
+                    <button
+                      type="button"
+                      onClick={() => handleSetResult(match.id)}
