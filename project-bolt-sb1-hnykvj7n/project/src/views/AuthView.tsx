@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Trophy, Goal } from 'lucide-react';
+import LoadingSoccer from '@/components/LoadingSoccer';
 
 export default function AuthView() {
   const { login, register } = useAuth();
@@ -126,6 +127,14 @@ export default function AuthView() {
           La quiniela definitiva del fútbol colombiano
         </p>
       </div>
+
+      {/* Animación del balón de fútbol cuando está procesando */}
+      {busy && (
+        <LoadingSoccer 
+          message={mode === 'login' ? 'Validando credenciales...' : 'Creando tu cuenta...'} 
+        />
+      )}
     </div>
   );
 }
+
