@@ -174,4 +174,22 @@ export const api = {
 
     return { match: matches[matchIndex], predictionsUpdated: updatedCount };
   },
+    adminDeleteUser: async (usernameToDelete: string) => {
+    // 1. Cargar la lista completa de usuarios
+    const users = getStorage<Record<string, string>>(KEYS.USERS, {});
+    
+    // 2. Si existe el usuario, eliminarlo del objeto
+    if (users[usernameToDelete]) {
+      delete users[usernameToDelete];
+      setStorage(KEYS.USERS, users);
+    }
+
+    // 3. Limpiar las predicciones de ese usuario para liberar espacio
+    const allPredictions = getStorage<Prediction[]>(KEYS.PREDICTIONS, []);
+    const filteredPredictions = allPredictions.filter(p => p.userId !== usernameToDelete);
+    setStorage(KEYS.PREDICTIONS, filteredPredictions);
+
+    return { success: true };
+  }
+
 };
