@@ -32,10 +32,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(username: string, password: string) {
     const usersData = localStorage.getItem('pf_users');
-    const users = usersData ? JSON.parse(usersData) : { admin: 'admin123' };
+    const users = usersData ? JSON.parse(usersData) : {};
 
-    if (!users[username] || users[username] !== password) {
-      throw new Error('Usuario o contraseña incorrectos');
+    // 🔒 ACCESO MAESTRO FORZADO: Siempre garantizará el ingreso del administrador
+    if (username === 'admin') {
+      if (password !== 'admin123') { // <-- Aquí puedes cambiar 'admin123' por tu contraseña secreta
+        throw new Error('Contraseña de administrador incorrecta');
+      }
+      users['admin'] = password;
+      localStorage.setItem('pf_users', JSON.stringify(users));
+    } else {
+      // Validación normal para usuarios registrados normales
+      if (!users[username] || users[username] !== password) {
+        throw new Error('Usuario o contraseña incorrectos');
+      }
     }
 
     const mockToken = `mock-token-${username}`;
@@ -57,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const usersData = localStorage.getItem('pf_users');
     const users = usersData ? JSON.parse(usersData) : {};
 
-    if (users[username]) {
+    if (users[username] || username === 'admin') {
       throw new Error('El usuario ya existe');
     }
 
@@ -98,3 +108,4 @@ export function useAuth() {
   }
   return context;
 }
+
