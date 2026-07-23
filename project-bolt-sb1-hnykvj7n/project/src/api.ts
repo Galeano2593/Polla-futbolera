@@ -112,12 +112,8 @@ export const api = {
     return { leaderboard };
   },
 
-    adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
-    // 🛠️ ID numérico corto aleatorio para alinearse de forma exacta al formato de tu base de datos
+     adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
     const matchId = `m${Math.floor(Math.random() * 100000)}`;
-    
-    // 🇨🇴 Estructurar la fecha limpiando la 'T' nativa de HTML y añadiendo la zona horaria fija de Colombia (-05)
-    const formattedKickoff = data.kickoff.replace('T', ' ') + ':00-05';
 
     await sbRequest('matches', {
       method: 'POST',
@@ -125,7 +121,7 @@ export const api = {
         id: matchId, 
         home_team: data.homeTeam.trim(), 
         away_team: data.awayTeam.trim(), 
-        kickoff: formattedKickoff, 
+        kickoff: data.kickoff, // <--- Dejar solo data.kickoff limpio, ya que Adminview.tsx lo formatea completo
         status: 'scheduled' 
       }),
       headers: { 'Prefer': 'return=representation' }
