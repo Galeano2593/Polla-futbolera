@@ -110,15 +110,28 @@ export const api = {
     return { leaderboard };
   },
 
-  adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
-    const matchId = `m-${Date.now()}`;
+    adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
+    // 🛠️ ID numérico corto aleatorio para alinearse de forma exacta al formato de tu base de datos
+    const matchId = `m${Math.floor(Math.random() * 100000)}`;
+    
+    // 🇨🇴 Estructurar la fecha limpiando la 'T' nativa de HTML y añadiendo la zona horaria fija de Colombia (-05)
+    const formattedKickoff = data.kickoff.replace('T', ' ') + ':00-05';
+
     await sbRequest('matches', {
       method: 'POST',
-      body: JSON.stringify({ id: matchId, home_team: data.homeTeam, away_team: data.awayTeam, kickoff: data.kickoff, status: 'scheduled' }),
+      body: JSON.stringify({ 
+        id: matchId, 
+        home_team: data.homeTeam.trim(), 
+        away_team: data.awayTeam.trim(), 
+        kickoff: formattedKickoff, 
+        status: 'scheduled' 
+      }),
       headers: { 'Prefer': 'return=representation' }
     });
+    
     return { match: { id: matchId, homeTeam: data.homeTeam, awayTeam: data.awayTeam, kickoff: data.kickoff, status: 'scheduled' } };
   },
+
 
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
