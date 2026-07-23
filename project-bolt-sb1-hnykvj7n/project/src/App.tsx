@@ -4,7 +4,7 @@ import Layout from '@/components/Layout';
 import AuthView from '@/views/AuthView';
 import PredictionsView from '@/views/PredictionsView';
 import LeaderboardView from '@/views/LeaderboardView';
-import AdminView from '@/views/AdminView';
+import AdminView from '@/views/Adminview';
 import RulesView from '@/views/RulesView'; // Importación de la nueva vista de reglas
 import { useAuth } from '@/context/AuthContext';
 import type { ReactNode } from 'react';
