@@ -64,8 +64,8 @@ export default function AdminView() {
         <h3 className="text-lg font-semibold text-yellow-400 flex items-center gap-2"><PlusCircle className="w-5 h-5" /> Crear Nuevo Partido</h3>
         <form onSubmit={handleCreateMatch} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <input type="text" value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 text-sm" placeholder="Equipo Local" required />
-            <input type="text" value={awayTeam} onChange={(e) => setAwayTeam(e.target.value)} className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 text-sm" placeholder="Equipo Visitante" required />
+            <input type="text" value={homeTeam} onChange={(e) => setHomeTeam(e.target.value)} className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm" placeholder="Equipo Local" required />
+            <input type="text" value={awayTeam} onChange={(e) => setAwayTeam(e.target.value)} className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm" placeholder="Equipo Visitante" required />
           </div>
           <input type="datetime-local" value={kickoff} onChange={(e) => setKickoff(e.target.value)} className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white scheme-dark text-sm" required />
           <button type="submit" disabled={busy} className="w-full py-3 rounded-xl bg-yellow-500 text-slate-950 font-bold text-sm shadow-lg">{busy ? 'Guardando...' : 'Registrar Partido'}</button>
@@ -100,3 +100,4 @@ export default function AdminView() {
     </div>
   );
 }
+
