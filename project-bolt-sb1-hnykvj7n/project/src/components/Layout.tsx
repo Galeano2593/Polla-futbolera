@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { Trophy, Calendar, LogOut, ShieldAlert } from 'lucide-react';
+import { Trophy, Calendar, LogOut, ShieldAlert, BookOpen } from 'lucide-react';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -54,13 +54,13 @@ export default function Layout() {
 
       {/* Menú de Navegación Inferior Móvil / Escritorio */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-xl border-t border-slate-800/80 z-40 shadow-2xl">
-        <div className="max-w-md mx-auto px-6 h-16 flex justify-around items-center">
+        <div className="max-w-md mx-auto px-4 h-16 flex justify-around items-center">
           <Link
             to="/predictions"
             className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
               location.pathname === '/predictions'
                 ? 'text-emerald-400 scale-105'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <Calendar className="w-5 h-5" />
@@ -72,11 +72,23 @@ export default function Layout() {
             className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
               location.pathname === '/leaderboard'
                 ? 'text-emerald-400 scale-105'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <Trophy className="w-5 h-5" />
             <span>Tabla</span>
+          </Link>
+
+          <Link
+            to="/rules"
+            className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
+              location.pathname === '/rules'
+                ? 'text-emerald-400 scale-105'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <BookOpen className="w-5 h-5" />
+            <span>Reglas</span>
           </Link>
 
           {/* Acceso rápido para el Administrador de la Liga BetPlay */}
@@ -86,7 +98,7 @@ export default function Layout() {
               className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
                 location.pathname === '/admin'
                   ? 'text-yellow-400 scale-105'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
               <ShieldAlert className="w-5 h-5" />
@@ -98,4 +110,5 @@ export default function Layout() {
     </div>
   );
 }
+
 
