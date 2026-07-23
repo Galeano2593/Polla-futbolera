@@ -47,9 +47,15 @@ export const api = {
       }
     });
 
-    const user: AuthUser = { id: cleanUsername, username: fullName.trim(), role: cleanUsername === 'admin' ? 'admin' : 'user' };
+    // CORRECCIÓN: Estructura de AuthUser consistente con el resto de la app
+    const user: AuthUser = { 
+      id: cleanUsername, 
+      username: fullName.trim(), 
+      role: cleanUsername === 'admin' ? 'admin' : 'user' 
+    };
+
     localStorage.setItem('pf_token', `sb-token-${cleanUsername}`);
-    localStorage.setItem('pf_current_user', JSON.stringify(user));
+    localStorage.setItem('pf_current_user', JSON.stringify({ ...user, rawUsername: cleanUsername }));
     return { token: `sb-token-${cleanUsername}`, user };
   },
 
@@ -59,18 +65,17 @@ export const api = {
     if (cleanUsername === 'admin' && password === 'admin123') {
       const adminUser: AuthUser = { id: 'admin', username: 'Administrador', role: 'admin' };
       localStorage.setItem('pf_token', 'sb-token-admin');
-      localStorage.setItem('pf_current_user', JSON.stringify(adminUser));
+      localStorage.setItem('pf_current_user', JSON.stringify({ ...adminUser, rawUsername: 'admin' }));
       return { token: 'sb-token-admin', user: adminUser };
     }
 
-    // 🔒 CONSULTA DE SEGURIDAD CORREGIDA: Extrae el usuario de forma exacta del arreglo de la nube
     const res = await sbRequest<any[]>(`users?username=eq.${cleanUsername}&select=*`);
     
     if (!res || res.length === 0) {
       throw new Error('Usuario o contraseña incorrectos');
     }
     
-    const dbUser = res[0]; // <--- Extracción correcta del primer elemento del arreglo
+    const dbUser = res[0];
 
     if (dbUser.password !== password) {
       throw new Error('Usuario o contraseña incorrectos');
@@ -78,13 +83,13 @@ export const api = {
 
     const user: AuthUser = { id: dbUser.username, username: dbUser.full_name, role: dbUser.role };
     localStorage.setItem('pf_token', `sb-token-${dbUser.username}`);
-    localStorage.setItem('pf_current_user', JSON.stringify(user));
+    localStorage.setItem('pf_current_user', JSON.stringify({ ...user, rawUsername: dbUser.username }));
     return { token: `sb-token-${dbUser.username}`, user };
   },
 
   getMatches: async () => {
     const matches = await sbRequest<any[]>(`matches?select=*&order=kickoff.asc`);
-    const mapped: Match[] = matches.map((m: any) => ({
+    const mapped: Match[] = (matches || []).map((m: any) => ({
       id: m.id,
       homeTeam: m.home_team,
       awayTeam: m.away_team,
@@ -100,9 +105,10 @@ export const api = {
     const savedUser = localStorage.getItem('pf_current_user');
     if (!savedUser) return { predictions: [] };
     const currentUser = JSON.parse(savedUser);
+    const targetUsername = currentUser.rawUsername || currentUser.id;
 
-    const predictions = await sbRequest<any[]>(`predictions?username=eq.${currentUser.id}&select=*`);
-    const mapped = predictions.map(p => ({
+    const predictions = await sbRequest<any[]>(`predictions?username=eq.${targetUsername}&select=*`);
+    const mapped = (predictions || []).map(p => ({
       id: p.id,
       matchId: p.match_id,
       userId: p.username,
@@ -117,13 +123,14 @@ export const api = {
     const savedUser = localStorage.getItem('pf_current_user');
     if (!savedUser) throw new Error('No autenticado');
     const currentUser = JSON.parse(savedUser);
+    const targetUsername = currentUser.rawUsername || currentUser.id;
 
-    const predId = `${currentUser.id}-${matchId}`;
+    const predId = `${targetUsername}-${matchId}`;
     await sbRequest(`predictions`, {
       method: 'POST',
       body: JSON.stringify({
         id: predId,
-        username: currentUser.id,
+        username: targetUsername,
         match_id: matchId,
         home_score: homeScore,
         away_score: awayScore
@@ -132,27 +139,34 @@ export const api = {
     });
 
     return { 
-      prediction: { id: predId, matchId, userId: currentUser.id, homeScore, awayScore, createdAt: new Date().toISOString() } 
+      prediction: { id: predId, matchId, userId: targetUsername, homeScore, awayScore, createdAt: new Date().toISOString() } 
     };
   },
 
-    getLeaderboard: async () => {
-    // 🛠️ Petición general sin filtros restrictivos para asegurar la respuesta de Supabase
+  getLeaderboard: async () => {
     const [users, matches, allPredictions] = await Promise.all([
-      sbRequest<any[]>(`users?select=*`),
-      sbRequest<any[]>(`matches?select=*`),
-      sbRequest<any[]>(`predictions?select=*`)
+      sbRequest<any[]>(`users?select=*`).catch(() => []),
+      sbRequest<any[]>(`matches?select=*`).catch(() => []),
+      sbRequest<any[]>(`predictions?select=*`).catch(() => [])
     ]);
 
-    // Filtrar al administrador de forma segura en la interfaz de React
-    const leaderboard: LeaderboardRow[] = users
-      .filter(u => u.username !== 'admin' && u.role !== 'admin')
+    const safeUsers = Array.isArray(users) ? users : [];
+    const safeMatches = Array.isArray(matches) ? matches : [];
+    const safePredictions = Array.isArray(allPredictions) ? allPredictions : [];
+
+    // CORRECCIÓN: Muestra a todos los usuarios que no sean admin
+    const leaderboard: LeaderboardRow[] = safeUsers
+      .filter(u => u && u.username && u.username.toLowerCase() !== 'admin' && u.role !== 'admin')
       .map((u) => {
         let points = 0;
-        const userPredictions = allPredictions.filter(p => p.username === u.username);
+        
+        // Búsqueda de predicciones insensible a mayúsculas/minúsculas
+        const userPredictions = safePredictions.filter(
+          p => p && p.username && p.username.toLowerCase() === u.username.toLowerCase()
+        );
 
         userPredictions.forEach(p => {
-          const match = matches.find(m => m.id === p.match_id);
+          const match = safeMatches.find(m => m.id === p.match_id);
           if (match && match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
             const actualHome = match.home_score;
             const actualAway = match.away_score;
@@ -182,7 +196,7 @@ export const api = {
         return {
           rank: 0,
           userId: u.username,
-          username: u.full_name,
+          username: u.full_name || u.username, // Usa el nombre completo para mostrar en la tabla
           points,
           played: userPredictions.length,
         };
