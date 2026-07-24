@@ -1,23 +1,29 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
-import type { LeaderboardRow, Match, Prediction, User as UserType } from '@/types';
+import type { LeaderboardRow, Match, Prediction } from '@/types';
 import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye, Lock } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
+type ExtendedLeaderboardRow = LeaderboardRow & {
+  rawUsername?: string;
+};
+
 export default function LeaderboardView() {
   const { user } = useAuth();
-  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
+  const [leaderboard, setLeaderboard] = useState<ExtendedLeaderboardRow[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  
-  // Estado para controlar qué usuario tiene el desplegable de partidos abierto
+
+  // Estado para controlar qué usuario tiene el desplegable de partidos abierto (guarda el userId)
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
-  // Normalizar el nombre de usuario autenticado para comparaciones
-  const currentUsername = String(user?.username || '').trim().toLowerCase();
+  // Normalizar el id/username del usuario autenticado para comparaciones
+  const savedUserRaw = localStorage.getItem('pf_current_user');
+  const parsedUser = savedUserRaw ? JSON.parse(savedUserRaw) : null;
+  const currentUserId = String(parsedUser?.rawUsername || user?.id || user?.username || '').trim().toLowerCase();
 
   async function loadData() {
     try {
@@ -30,7 +36,7 @@ export default function LeaderboardView() {
             'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
             'Authorization': 'Bearer sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI'
           }
-        }).then(r => r.json()),
+        }).then(r => r.json()).catch(() => []),
         // Consultar usuarios directamente para extraer sus nombres reales registrados
         fetch('https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/users?select=*', {
           headers: {
@@ -43,13 +49,18 @@ export default function LeaderboardView() {
       setLeaderboard(res.leaderboard);
       setMatches(mRes.matches);
 
-      // Crear mapa de Nombre de Usuario -> Nombre Real
+      // Crear mapa de Username Único -> Nombre Real Completo
       if (Array.isArray(uRes)) {
         const map: Record<string, string> = {};
         uRes.forEach((u: any) => {
           const key = String(u.username || '').trim().toLowerCase();
-          // Guarda el nombre (name o full_name) registrado, o el mismo username como alternativa
-          map[key] = u.name || u.full_name || u.username;
+          // Guarda el nombre completo (full_name o name) o el username como fallback
+          const displayName = u.full_name && String(u.full_name).trim() !== '' 
+            ? u.full_name 
+            : u.name && String(u.name).trim() !== '' 
+              ? u.name 
+              : u.username;
+          map[key] = displayName;
         });
         setUsersMap(map);
       }
@@ -76,8 +87,8 @@ export default function LeaderboardView() {
     loadData();
   }, []);
 
-  async function handleDeleteUser(usernameToDelete: string) {
-    const confirmar = window.confirm(`¿Estás seguro de que deseas eliminar al usuario "${usernameToDelete}" y todos sus pronósticos?`);
+  async function handleDeleteUser(usernameToDelete: string, displayName: string) {
+    const confirmar = window.confirm(`¿Estás seguro de que deseas eliminar al usuario "${displayName}" (${usernameToDelete}) y todos sus pronósticos?`);
     if (!confirmar) return;
 
     setLoading(true);
@@ -92,9 +103,9 @@ export default function LeaderboardView() {
     }
   }
 
-  function toggleExpandUser(username: string) {
-    const cleanUser = String(username).trim().toLowerCase();
-    setExpandedUser(expandedUser === cleanUser ? null : cleanUser);
+  function toggleExpandUser(userId: string) {
+    const cleanId = String(userId).trim().toLowerCase();
+    setExpandedUser(expandedUser === cleanId ? null : cleanId);
   }
 
   if (loading) {
@@ -116,26 +127,26 @@ export default function LeaderboardView() {
         ) : (
           <div className="divide-y divide-slate-800/60">
             {leaderboard.map((row) => {
-              const rowUsername = String(row.username).trim().toLowerCase();
-              const isCurrentUser = currentUsername === rowUsername || String(row.userId).trim().toLowerCase() === currentUsername;
-              const isExpanded = expandedUser === rowUsername;
+              const rowUserId = String(row.rawUsername || row.userId).trim().toLowerCase();
+              const isCurrentUser = currentUserId === rowUserId;
+              const isExpanded = expandedUser === rowUserId;
 
-              // Obtener el Nombre ingresado registrado (si no existe, usa row.username)
-              const displayName = usersMap[rowUsername] || row.username;
+              // Obtener el Nombre Real Registrado (se busca en usersMap, luego row.username)
+              const displayName = usersMap[rowUserId] || row.username;
 
-              // Filtrar predicciones de ESTE usuario específico
+              // Filtrar predicciones de ESTE usuario específico por su ID único
               const userPreds = allPredictions.filter(
-                p => p.userId === rowUsername || p.userId === String(row.userId).trim().toLowerCase()
+                p => p.userId === rowUserId
               );
 
               return (
-                <div key={row.userId} className="flex flex-col">
+                <div key={rowUserId} className="flex flex-col">
                   {/* Fila Principal de Información */}
                   <div
                     className={`flex items-center justify-between p-4 transition-colors cursor-pointer ${
                       isCurrentUser ? 'bg-emerald-500/10' : 'hover:bg-slate-800/30'
                     }`}
-                    onClick={() => toggleExpandUser(row.username)}
+                    onClick={() => toggleExpandUser(rowUserId)}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
@@ -173,7 +184,7 @@ export default function LeaderboardView() {
 
                       {user?.role === 'admin' && (
                         <button
-                          onClick={() => handleDeleteUser(row.username)}
+                          onClick={() => handleDeleteUser(rowUserId, displayName)}
                           className="text-slate-500 hover:text-red-400 p-2 rounded-xl hover:bg-red-500/10 transition-colors"
                           title={`Eliminar a ${displayName}`}
                         >
