@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
-import type { LeaderboardRow, Match, Prediction } from '@/types';
+import type { LeaderboardRow, Match, Prediction, User as UserType } from '@/types';
 import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye, Lock } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
@@ -10,6 +10,7 @@ export default function LeaderboardView() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
+  const [usersMap, setUsersMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   
   // Estado para controlar qué usuario tiene el desplegable de partidos abierto
@@ -20,20 +21,38 @@ export default function LeaderboardView() {
 
   async function loadData() {
     try {
-      const [res, mRes, pRes] = await Promise.all([
+      const [res, mRes, pRes, uRes] = await Promise.all([
         api.getLeaderboard(),
         api.getMatches(),
-        // Consultar directamente a Supabase todas las predicciones para tener datos en tiempo real
+        // Consultar predicciones directamente
         fetch('https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/predictions?select=*', {
           headers: {
             'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
             'Authorization': 'Bearer sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI'
           }
-        }).then(r => r.json())
+        }).then(r => r.json()),
+        // Consultar usuarios directamente para extraer sus nombres reales registrados
+        fetch('https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/users?select=*', {
+          headers: {
+            'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+            'Authorization': 'Bearer sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI'
+          }
+        }).then(r => r.json()).catch(() => [])
       ]);
 
       setLeaderboard(res.leaderboard);
       setMatches(mRes.matches);
+
+      // Crear mapa de Nombre de Usuario -> Nombre Real
+      if (Array.isArray(uRes)) {
+        const map: Record<string, string> = {};
+        uRes.forEach((u: any) => {
+          const key = String(u.username || '').trim().toLowerCase();
+          // Guarda el nombre (name o full_name) registrado, o el mismo username como alternativa
+          map[key] = u.name || u.full_name || u.username;
+        });
+        setUsersMap(map);
+      }
 
       if (Array.isArray(pRes)) {
         const mappedPreds: Prediction[] = pRes.map((p: any) => ({
@@ -101,7 +120,10 @@ export default function LeaderboardView() {
               const isCurrentUser = currentUsername === rowUsername || String(row.userId).trim().toLowerCase() === currentUsername;
               const isExpanded = expandedUser === rowUsername;
 
-              // Filtrar predicciones de ESTE usuario específico (ignorando diferencias de mayúsculas/minúsculas)
+              // Obtener el Nombre ingresado registrado (si no existe, usa row.username)
+              const displayName = usersMap[rowUsername] || row.username;
+
+              // Filtrar predicciones de ESTE usuario específico
               const userPreds = allPredictions.filter(
                 p => p.userId === rowUsername || p.userId === String(row.userId).trim().toLowerCase()
               );
@@ -131,7 +153,7 @@ export default function LeaderboardView() {
                       <div className="flex items-center gap-2">
                         <User className={`w-4 h-4 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-500'}`} />
                         <span className={`text-sm font-semibold ${isCurrentUser ? 'text-emerald-400' : 'text-slate-200'}`}>
-                          {row.username} {isCurrentUser && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-1">Tú</span>}
+                          {displayName} {isCurrentUser && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-1">Tú</span>}
                         </span>
                         {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
                       </div>
@@ -153,7 +175,7 @@ export default function LeaderboardView() {
                         <button
                           onClick={() => handleDeleteUser(row.username)}
                           className="text-slate-500 hover:text-red-400 p-2 rounded-xl hover:bg-red-500/10 transition-colors"
-                          title={`Eliminar a ${row.username}`}
+                          title={`Eliminar a ${displayName}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -169,16 +191,12 @@ export default function LeaderboardView() {
                       </div>
                       
                       {matches.map(match => {
-                        // REGLA DE TIEMPO Y PROPIEDAD:
-                        // El partido ya cerró/empezó O es el usuario autenticado (Tú)
                         const isMatchClosed = new Date(match.kickoff) <= new Date() || match.status === 'finished';
                         const canSeePrediction = isMatchClosed || isCurrentUser;
 
-                        // Buscar el marcador que registró este usuario para este partido
                         const pred = userPreds.find(p => p.matchId === match.id);
 
                         if (!canSeePrediction) {
-                          // Si el partido sigue abierto Y NO soy yo mismo, ocultar marcador
                           return (
                             <div key={match.id} className="flex justify-between items-center text-xs bg-slate-900/20 p-2 rounded-xl border border-slate-800/40 text-slate-600 italic">
                               <span>{match.homeTeam} vs {match.awayTeam}</span>
