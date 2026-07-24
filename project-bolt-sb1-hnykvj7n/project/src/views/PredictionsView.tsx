@@ -52,6 +52,7 @@ export default function PredictionsView() {
         parseInt(matchScore.home, 10),
         parseInt(matchScore.away, 10)
       );
+      // Marcar como guardado
       setSavedStatus((prev) => ({ ...prev, [matchId]: true }));
     } catch (err) {
       console.error(err);
@@ -61,7 +62,11 @@ export default function PredictionsView() {
   }
 
   function handleScoreChange(matchId: string, side: 'home' | 'away', value: string) {
+    // 🔒 SI YA ESTÁ GUARDADO, NO PERMITIR CAMBIOS
+    if (savedStatus[matchId]) return;
+
     if (value !== '' && !/^\d+$/.test(value)) return;
+    
     setScores((prev) => ({
       ...prev,
       [matchId]: {
@@ -69,7 +74,6 @@ export default function PredictionsView() {
         [side]: value,
       },
     }));
-    setSavedStatus((prev) => ({ ...prev, [matchId]: false }));
   }
 
   if (loading) {
@@ -86,11 +90,12 @@ export default function PredictionsView() {
       <div className="grid gap-4 w-full px-1">
         {matches.map((match) => {
           const isSaved = !!savedStatus[match.id];
-          const hasScores = scores[match.id]?.home !== '' && scores[match.id]?.away !== '' && scores[match.id]?.home !== undefined && scores[match.id]?.away !== undefined;
+          const hasScores = scores[match.id]?.home !== '' && scores[match.id]?.away !== '' && scores[match.id]?.home !== undefined;
           
-          // Partido bloqueado si: ya finalizó, ya inició la fecha/hora, o el usuario ya guardó
           const hasStarted = new Date(match.kickoff) <= new Date();
           const isFinished = match.status === 'finished';
+          
+          // 🔒 Regla de Bloqueo Total: Partido finalizado, iniciado O YA GUARDADO por el usuario
           const isLocked = isFinished || hasStarted || isSaved;
 
           return (
@@ -98,7 +103,7 @@ export default function PredictionsView() {
               key={match.id}
               className={`bg-slate-900/60 backdrop-blur-xl border ${
                 isSaved ? 'border-emerald-500/30' : 'border-slate-800/80'
-              } rounded-2xl p-4 sm:p-5 shadow-xl transition-all hover:border-slate-700/60 w-full overflow-hidden`}
+              } rounded-2xl p-4 sm:p-5 shadow-xl transition-all w-full overflow-hidden`}
             >
               <div className="flex justify-between items-center text-xs text-slate-400 mb-4 border-b border-slate-800/50 pb-2">
                 <div className="flex items-center gap-1.5 font-medium">
@@ -130,7 +135,7 @@ export default function PredictionsView() {
                     {match.homeTeam}
                   </div>
 
-                  {/* Campo de marcadores */}
+                  {/* Cajas de Marcadores */}
                   <div className="flex items-center gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
                     <input
                       type="text"
@@ -138,10 +143,10 @@ export default function PredictionsView() {
                       pattern="[0-9]*"
                       value={scores[match.id]?.home ?? ''}
                       onChange={(e) => handleScoreChange(match.id, 'home', e.target.value)}
-                      disabled={isLocked} // 🔒 SE DESHABILITA SI YA FUE GUARDADO O COMENZÓ
+                      disabled={isLocked} // 🔒 SE DESHABILITA SI YA ESTÁ GUARDADO
                       className={`w-10 h-10 text-center border rounded-lg text-lg font-bold focus:outline-none transition ${
                         isLocked
-                          ? 'bg-slate-950/80 text-emerald-400 border-slate-800 cursor-not-allowed opacity-90'
+                          ? 'bg-slate-950/90 text-emerald-400 border-slate-800/80 cursor-not-allowed opacity-90'
                           : 'bg-slate-900 text-white border-slate-700/60 focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500'
                       }`}
                       placeholder="-"
@@ -153,10 +158,10 @@ export default function PredictionsView() {
                       pattern="[0-9]*"
                       value={scores[match.id]?.away ?? ''}
                       onChange={(e) => handleScoreChange(match.id, 'away', e.target.value)}
-                      disabled={isLocked} // 🔒 SE DESHABILITA SI YA FUE GUARDADO O COMENZÓ
+                      disabled={isLocked} // 🔒 SE DESHABILITA SI YA ESTÁ GUARDADO
                       className={`w-10 h-10 text-center border rounded-lg text-lg font-bold focus:outline-none transition ${
                         isLocked
-                          ? 'bg-slate-950/80 text-emerald-400 border-slate-800 cursor-not-allowed opacity-90'
+                          ? 'bg-slate-950/90 text-emerald-400 border-slate-800/80 cursor-not-allowed opacity-90'
                           : 'bg-slate-900 text-white border-slate-700/60 focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500'
                       }`}
                       placeholder="-"
@@ -168,7 +173,7 @@ export default function PredictionsView() {
                   </div>
                 </div>
 
-                {/* Botón de Guardado o Indicador de Bloqueo */}
+                {/* Botón de Estado / Acción */}
                 {isFinished || hasStarted ? (
                   <div className="bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-medium text-slate-400 flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-amber-500" />
@@ -184,7 +189,7 @@ export default function PredictionsView() {
                     disabled={!hasScores || isSaved}
                     className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 border ${
                       isSaved
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 cursor-default'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 cursor-not-allowed opacity-80'
                         : !hasScores
                         ? 'bg-slate-800 text-slate-500 border-slate-700/30 cursor-not-allowed'
                         : 'bg-emerald-500 hover:bg-emerald-400 text-white border-emerald-400/20 shadow-lg shadow-emerald-500/20'
