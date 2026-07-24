@@ -48,7 +48,7 @@ export default function LeaderboardView() {
       }
     } catch (err) {
       console.error(err);
-    } fontally {
+    } finally {
       setLoading(false);
     }
   }
