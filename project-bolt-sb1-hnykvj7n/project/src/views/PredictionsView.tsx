@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import type { Match, Prediction } from '@/types';
-import { Calendar, Save, CheckCircle } from 'lucide-react';
+import { Calendar, Save, CheckCircle, Lock } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 export default function PredictionsView() {
@@ -84,15 +84,22 @@ export default function PredictionsView() {
       </div>
 
       <div className="grid gap-4 w-full px-1">
-         {matches.map((match) => {
-          const isSaved = savedStatus[match.id];
-          const hasScores = scores[match.id]?.home !== '' && scores[match.id]?.away !== '';
+        {matches.map((match) => {
+          const isSaved = !!savedStatus[match.id];
+          const hasScores = scores[match.id]?.home !== '' && scores[match.id]?.away !== '' && scores[match.id]?.home !== undefined && scores[match.id]?.away !== undefined;
+          
+          // Partido bloqueado si: ya finalizó, ya inició la fecha/hora, o el usuario ya guardó
+          const hasStarted = new Date(match.kickoff) <= new Date();
+          const isFinished = match.status === 'finished';
+          const isLocked = isFinished || hasStarted || isSaved;
 
           return (
             <div
-  key={match.id}
-  className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xl transition-all hover:border-slate-700/60 w-full overflow-hidden"
->
+              key={match.id}
+              className={`bg-slate-900/60 backdrop-blur-xl border ${
+                isSaved ? 'border-emerald-500/30' : 'border-slate-800/80'
+              } rounded-2xl p-4 sm:p-5 shadow-xl transition-all hover:border-slate-700/60 w-full overflow-hidden`}
+            >
               <div className="flex justify-between items-center text-xs text-slate-400 mb-4 border-b border-slate-800/50 pb-2">
                 <div className="flex items-center gap-1.5 font-medium">
                   <Calendar className="w-3.5 h-3.5 text-emerald-400" />
@@ -106,21 +113,24 @@ export default function PredictionsView() {
                 </div>
                 <span
                   className={`px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider text-[10px] ${
-                    match.status === 'finished'
+                    isFinished
                       ? 'bg-slate-800 text-slate-400 border border-slate-700/40'
+                      : hasStarted
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                       : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                   }`}
                 >
-                  {match.status === 'finished' ? 'Finalizado' : 'Abierto'}
+                  {isFinished ? 'Finalizado' : hasStarted ? 'En Juego' : 'Abierto'}
                 </span>
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-               <div className="flex flex-1 items-center justify-center gap-2 sm:gap-4 w-full overflow-hidden">
+                <div className="flex flex-1 items-center justify-center gap-2 sm:gap-4 w-full overflow-hidden">
                   <div className="flex-1 text-right font-semibold text-sm sm:text-base text-slate-100 truncate">
                     {match.homeTeam}
                   </div>
 
+                  {/* Campo de marcadores */}
                   <div className="flex items-center gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
                     <input
                       type="text"
@@ -128,8 +138,12 @@ export default function PredictionsView() {
                       pattern="[0-9]*"
                       value={scores[match.id]?.home ?? ''}
                       onChange={(e) => handleScoreChange(match.id, 'home', e.target.value)}
-                      disabled={match.status === 'finished'}
-                      className="w-10 h-10 text-center bg-slate-900 text-white border border-slate-700/60 rounded-lg text-lg font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      disabled={isLocked} // 🔒 SE DESHABILITA SI YA FUE GUARDADO O COMENZÓ
+                      className={`w-10 h-10 text-center border rounded-lg text-lg font-bold focus:outline-none transition ${
+                        isLocked
+                          ? 'bg-slate-950/80 text-emerald-400 border-slate-800 cursor-not-allowed opacity-90'
+                          : 'bg-slate-900 text-white border-slate-700/60 focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500'
+                      }`}
                       placeholder="-"
                     />
                     <span className="text-slate-600 font-bold">:</span>
@@ -139,8 +153,12 @@ export default function PredictionsView() {
                       pattern="[0-9]*"
                       value={scores[match.id]?.away ?? ''}
                       onChange={(e) => handleScoreChange(match.id, 'away', e.target.value)}
-                      disabled={match.status === 'finished'}
-                      className="w-10 h-10 text-center bg-slate-900 text-white border border-slate-700/60 rounded-lg text-lg font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      disabled={isLocked} // 🔒 SE DESHABILITA SI YA FUE GUARDADO O COMENZÓ
+                      className={`w-10 h-10 text-center border rounded-lg text-lg font-bold focus:outline-none transition ${
+                        isLocked
+                          ? 'bg-slate-950/80 text-emerald-400 border-slate-800 cursor-not-allowed opacity-90'
+                          : 'bg-slate-900 text-white border-slate-700/60 focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500'
+                      }`}
                       placeholder="-"
                     />
                   </div>
@@ -150,16 +168,26 @@ export default function PredictionsView() {
                   </div>
                 </div>
 
-                {match.status !== 'finished' && (
+                {/* Botón de Guardado o Indicador de Bloqueo */}
+                {isFinished || hasStarted ? (
+                  <div className="bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-medium text-slate-400 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-500" />
+                    {isFinished ? (
+                      <span>Resultado: <strong className="text-yellow-400">{match.homeScore} - {match.awayScore}</strong></span>
+                    ) : (
+                      <span>Cerrado por horario</span>
+                    )}
+                  </div>
+                ) : (
                   <button
                     onClick={() => handleSave(match.id)}
                     disabled={!hasScores || isSaved}
                     className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 border ${
                       isSaved
-                        ? 'bg-slate-950 text-slate-500 border-slate-800 cursor-default'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 cursor-default'
                         : !hasScores
-                          ? 'bg-slate-800 text-slate-500 border-slate-700/30 cursor-not-allowed'
-                          : 'bg-emerald-500 hover:bg-emerald-400 text-white border-emerald-400/20 shadow-lg shadow-emerald-500/20'
+                        ? 'bg-slate-800 text-slate-500 border-slate-700/30 cursor-not-allowed'
+                        : 'bg-emerald-500 hover:bg-emerald-400 text-white border-emerald-400/20 shadow-lg shadow-emerald-500/20'
                     }`}
                   >
                     {isSaved ? (
@@ -175,19 +203,12 @@ export default function PredictionsView() {
                     )}
                   </button>
                 )}
-
-                {match.status === 'finished' && (
-                  <div className="bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-medium text-slate-300">
-                    Resultado: <span className="text-yellow-400 font-bold">{match.homeScore} - {match.awayScore}</span>
-                  </div>
-                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Balón animado flotante al guardar la predicción */}
       {isSaving && <LoadingSoccer message="Guardando tu pronóstico..." />}
     </div>
   );
