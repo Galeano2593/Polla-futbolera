@@ -100,7 +100,9 @@ export const api = {
       throw new Error('Usuario o contraseña incorrectos');
     }
 
-    const user: AuthUser = { id: dbUser.username, username: dbUser.full_name, role: dbUser.role };
+    const displayName = dbUser.full_name && dbUser.full_name.trim() !== '' ? dbUser.full_name : dbUser.username;
+    const user: AuthUser = { id: dbUser.username, username: displayName, role: dbUser.role };
+    
     localStorage.setItem('pf_token', `sb-token-${dbUser.username}`);
     localStorage.setItem('pf_current_user', JSON.stringify({ ...user, rawUsername: dbUser.username }));
     return { token: `sb-token-${dbUser.username}`, user };
@@ -149,7 +151,7 @@ export const api = {
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
     const displayName = currentUser.username || targetUsername;
 
-    // 1. Asegurar registro del usuario en 'users'
+    // 1. Asegurar registro/actualización del usuario en 'users'
     await sbRequest(`users`, {
       method: 'POST',
       body: JSON.stringify({
@@ -191,7 +193,7 @@ export const api = {
     const safeMatches = Array.isArray(matches) ? matches : [];
     const safePredictions = Array.isArray(allPredictions) ? allPredictions : [];
 
-    const leaderboard: LeaderboardRow[] = safeUsers
+    const leaderboard: (LeaderboardRow & { rawUsername?: string })[] = safeUsers
       .filter(u => u && u.username && u.username.toLowerCase() !== 'admin' && u.role !== 'admin')
       .map((u) => {
         let points = 0;
@@ -229,10 +231,14 @@ export const api = {
           }
         });
 
+        // Retorna el nombre completo de Supabase (full_name) si existe, de lo contrario cae en username
+        const displayName = u.full_name && u.full_name.trim() !== '' ? u.full_name : u.username;
+
         return {
           rank: 0,
           userId: normalizedUsername,
-          username: u.full_name || u.username,
+          username: displayName,
+          rawUsername: normalizedUsername,
           points,
           played: userPredictions.length,
         };
