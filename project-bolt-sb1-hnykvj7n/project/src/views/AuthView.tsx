@@ -18,17 +18,21 @@ export default function AuthView() {
     e.preventDefault();
     setError('');
     setBusy(true);
+
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanFullName = fullName.trim() || cleanUsername;
+
     try {
       if (mode === 'login') {
-        await login(username, password);
+        await login(cleanUsername, password);
       } else {
-        // Enviar el nombre completo como tercer parámetro al registrarse
+        // Garantizamos el paso explícito del nombre completo como full_name
         // @ts-ignore
-        await register(username, password, fullName);
+        await register(cleanUsername, password, cleanFullName);
       }
       navigate('/predictions');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error');
+      setError(err instanceof Error ? err.message : 'Error al procesar la solicitud');
     } finally {
       setBusy(false);
     }
@@ -116,6 +120,7 @@ export default function AuthView() {
                 required
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">
                 Contraseña
