@@ -145,7 +145,7 @@ export const api = {
     const targetUsername = (currentUser.rawUsername || currentUser.id).toLowerCase();
     const displayName = currentUser.username || targetUsername;
 
-    // 🛠️ SOLUCIÓN DEFINITIVA: Registra o asegura el usuario en la tabla 'users' al guardar su pronóstico
+    // Registra o asegura el usuario en la tabla 'users'
     await sbRequest(`users`, {
       method: 'POST',
       body: JSON.stringify({
@@ -239,6 +239,10 @@ export const api = {
     return { leaderboard };
   },
 
+  // ==========================================
+  // ⚙️ FUNCIONES DE ADMINISTRACIÓN
+  // ==========================================
+
   adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
     const matchId = `m${Math.floor(Math.random() * 100000)}`;
 
@@ -270,6 +274,20 @@ export const api = {
       }
     });
     return { match: {} as any, predictionsUpdated: 1 };
+  },
+
+  // 🕒 NVO: Permite cambiar la fecha u hora de un partido (aplazamientos o cambios de horario)
+  adminUpdateMatchKickoff: async (matchId: string, newKickoff: string) => {
+    await sbRequest(`matches?id=eq.${matchId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        kickoff: newKickoff
+      }),
+      headers: {
+        'Prefer': 'return=representation'
+      }
+    });
+    return { success: true };
   },
 
   adminDeleteUser: async (usernameToDelete: string) => {
