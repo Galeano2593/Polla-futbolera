@@ -19,15 +19,23 @@ async function sbRequest<T>(path: string, options: RequestInit = {}): Promise<T>
   });
   
   if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.message || 'Error en la base de datos');
+    const errText = await res.text().catch(() => '');
+    let errData: any = {};
+    try { errData = JSON.parse(errText); } catch { errData = {}; }
+    throw new Error(errData.message || errData.hint || `Error ${res.status} en la base de datos`);
   }
   
   if (res.status === 204) {
     return {} as T;
   }
   
-  return await res.json() as T;
+  // CORRECCIÓN: Verifica si hay respuesta antes de parsear a JSON
+  const text = await res.text();
+  if (!text || text.trim() === '') {
+    return {} as T;
+  }
+
+  return JSON.parse(text) as T;
 }
 
 export const api = {
@@ -47,7 +55,6 @@ export const api = {
       }
     });
 
-    // CORRECCIÓN: Estructura de AuthUser consistente con el resto de la app
     const user: AuthUser = { 
       id: cleanUsername, 
       username: fullName.trim(), 
@@ -63,6 +70,18 @@ export const api = {
     const cleanUsername = username.trim().toLowerCase();
     
     if (cleanUsername === 'admin' && password === 'admin123') {
+      // Asegura que el usuario admin exista en Supabase
+      await sbRequest(`users`, {
+        method: 'POST',
+        body: JSON.stringify({
+          username: 'admin',
+          password: 'admin123',
+          full_name: 'Administrador',
+          role: 'admin'
+        }),
+        headers: { 'Prefer': 'resolution=merge-duplicates' }
+      }).catch(() => {});
+
       const adminUser: AuthUser = { id: 'admin', username: 'Administrador', role: 'admin' };
       localStorage.setItem('pf_token', 'sb-token-admin');
       localStorage.setItem('pf_current_user', JSON.stringify({ ...adminUser, rawUsername: 'admin' }));
@@ -154,7 +173,7 @@ export const api = {
     const safeMatches = Array.isArray(matches) ? matches : [];
     const safePredictions = Array.isArray(allPredictions) ? allPredictions : [];
 
-    // CORRECCIÓN: Muestra a todos los usuarios que no sean admin
+    // Filtra para mostrar usuarios que no sean administradores
     const leaderboard: LeaderboardRow[] = safeUsers
       .filter(u => u && u.username && u.username.toLowerCase() !== 'admin' && u.role !== 'admin')
       .map((u) => {
@@ -196,7 +215,7 @@ export const api = {
         return {
           rank: 0,
           userId: u.username,
-          username: u.full_name || u.username, // Usa el nombre completo para mostrar en la tabla
+          username: u.full_name || u.username,
           points,
           played: userPredictions.length,
         };
