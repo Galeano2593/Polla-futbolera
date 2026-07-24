@@ -2,14 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import type { LeaderboardRow, Match, Prediction } from '@/types';
-import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye, Lock } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
-
-// Ayudante local para leer LocalStorage de forma segura
-function getStorage<T>(key: string, fallback: T): T {
-  const data = localStorage.getItem(key);
-  return data ? JSON.parse(data) : fallback;
-}
 
 export default function LeaderboardView() {
   const { user } = useAuth();
@@ -21,20 +15,40 @@ export default function LeaderboardView() {
   // Estado para controlar qué usuario tiene el desplegable de partidos abierto
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
+  // Normalizar el nombre de usuario autenticado para comparaciones
+  const currentUsername = String(user?.username || '').trim().toLowerCase();
+
   async function loadData() {
     try {
-      const res = await api.getLeaderboard();
+      const [res, mRes, pRes] = await Promise.all([
+        api.getLeaderboard(),
+        api.getMatches(),
+        // Consultar directamente a Supabase todas las predicciones para tener datos en tiempo real
+        fetch('https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/predictions?select=*', {
+          headers: {
+            'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+            'Authorization': 'Bearer sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI'
+          }
+        }).then(r => r.json())
+      ]);
+
       setLeaderboard(res.leaderboard);
-      
-      // Cargamos los partidos y predicciones globales directo para cruzar datos de auditoría
-      const mRes = await api.getMatches();
       setMatches(mRes.matches);
-      
-      const preds = getStorage<Prediction[]>('pf_predictions', []);
-      setAllPredictions(preds);
+
+      if (Array.isArray(pRes)) {
+        const mappedPreds: Prediction[] = pRes.map((p: any) => ({
+          id: p.id,
+          matchId: p.match_id,
+          userId: String(p.username).trim().toLowerCase(),
+          homeScore: p.home_score,
+          awayScore: p.away_score,
+          createdAt: p.created_at
+        }));
+        setAllPredictions(mappedPreds);
+      }
     } catch (err) {
       console.error(err);
-    } finally {
+    } fontally {
       setLoading(false);
     }
   }
@@ -60,7 +74,8 @@ export default function LeaderboardView() {
   }
 
   function toggleExpandUser(username: string) {
-    setExpandedUser(expandedUser === username ? null : username);
+    const cleanUser = String(username).trim().toLowerCase();
+    setExpandedUser(expandedUser === cleanUser ? null : cleanUser);
   }
 
   if (loading) {
@@ -82,11 +97,14 @@ export default function LeaderboardView() {
         ) : (
           <div className="divide-y divide-slate-800/60">
             {leaderboard.map((row) => {
-              const isCurrentUser = user?.username === row.username;
-              const isExpanded = expandedUser === row.username;
+              const rowUsername = String(row.username).trim().toLowerCase();
+              const isCurrentUser = currentUsername === rowUsername || String(row.userId).trim().toLowerCase() === currentUsername;
+              const isExpanded = expandedUser === rowUsername;
 
-              // Filtrar predicciones de ESTE usuario específico
-              const userPreds = allPredictions.filter(p => p.userId === row.username);
+              // Filtrar predicciones de ESTE usuario específico (ignorando diferencias de mayúsculas/minúsculas)
+              const userPreds = allPredictions.filter(
+                p => p.userId === rowUsername || p.userId === String(row.userId).trim().toLowerCase()
+              );
 
               return (
                 <div key={row.userId} className="flex flex-col">
@@ -127,7 +145,7 @@ export default function LeaderboardView() {
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-0.5 justify-end mt-0.5">
                           <Hash className="w-2.5 h-2.5" />
-                          {row.played} jugados
+                          {userPreds.length} jugados
                         </div>
                       </div>
 
@@ -143,26 +161,30 @@ export default function LeaderboardView() {
                     </div>
                   </div>
 
-                  {/* Panel Desplegable: Pronósticos Auditables del Usuario */}
+                  {/* Panel Desplegable: Pronósticos del Usuario */}
                   {isExpanded && (
                     <div className="bg-slate-950/50 px-4 pb-4 pt-1 border-t border-slate-900 flex flex-col gap-2 animate-fadeIn">
                       <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase flex items-center gap-1 mb-1">
-                        <Eye className="w-3 h-3 text-emerald-400" /> Pronósticos visibles (Partidos cerrados o finalizados)
+                        <Eye className="w-3 h-3 text-emerald-400" /> Pronósticos visibles
                       </div>
                       
                       {matches.map(match => {
-                        // REGLA DE TIEMPO: El partido ya empezó o finalizó
+                        // REGLA DE TIEMPO Y PROPIEDAD:
+                        // El partido ya cerró/empezó O es el usuario autenticado (Tú)
                         const isMatchClosed = new Date(match.kickoff) <= new Date() || match.status === 'finished';
-                        
-                        // Buscar si este usuario le apostó a este partido
+                        const canSeePrediction = isMatchClosed || isCurrentUser;
+
+                        // Buscar el marcador que registró este usuario para este partido
                         const pred = userPreds.find(p => p.matchId === match.id);
 
-                        if (!isMatchClosed && !isCurrentUser) {
-                          // Si el partido está abierto y no soy yo mismo, ocultar información para evitar copias
+                        if (!canSeePrediction) {
+                          // Si el partido sigue abierto Y NO soy yo mismo, ocultar marcador
                           return (
                             <div key={match.id} className="flex justify-between items-center text-xs bg-slate-900/20 p-2 rounded-xl border border-slate-800/40 text-slate-600 italic">
                               <span>{match.homeTeam} vs {match.awayTeam}</span>
-                              <span className="text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-500 font-normal">Oculto hasta el silbatazo</span>
+                              <span className="text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-500 font-normal flex items-center gap-1">
+                                <Lock className="w-2.5 h-2.5 text-amber-500" /> Oculto hasta el silbatazo
+                              </span>
                             </div>
                           );
                         }
