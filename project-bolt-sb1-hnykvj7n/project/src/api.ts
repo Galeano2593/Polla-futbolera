@@ -29,7 +29,6 @@ async function sbRequest<T>(path: string, options: RequestInit = {}): Promise<T>
     return {} as T;
   }
   
-  // CORRECCIÓN: Verifica si hay respuesta antes de parsear a JSON
   const text = await res.text();
   if (!text || text.trim() === '') {
     return {} as T;
@@ -41,14 +40,16 @@ async function sbRequest<T>(path: string, options: RequestInit = {}): Promise<T>
 export const api = {
   register: async (username: string, password: string, fullName: string) => {
     const cleanUsername = username.trim().toLowerCase();
+    const cleanFullName = fullName.trim() || cleanUsername;
+    const role = cleanUsername === 'admin' ? 'admin' : 'user';
     
     await sbRequest(`users`, {
       method: 'POST',
       body: JSON.stringify({
         username: cleanUsername,
         password: password,
-        full_name: fullName.trim(),
-        role: cleanUsername === 'admin' ? 'admin' : 'user'
+        full_name: cleanFullName,
+        role: role
       }),
       headers: { 
         'Prefer': 'resolution=merge-duplicates,return=representation' 
@@ -57,8 +58,8 @@ export const api = {
 
     const user: AuthUser = { 
       id: cleanUsername, 
-      username: fullName.trim(), 
-      role: cleanUsername === 'admin' ? 'admin' : 'user' 
+      username: cleanFullName, 
+      role: role 
     };
 
     localStorage.setItem('pf_token', `sb-token-${cleanUsername}`);
@@ -70,7 +71,6 @@ export const api = {
     const cleanUsername = username.trim().toLowerCase();
     
     if (cleanUsername === 'admin' && password === 'admin123') {
-      // Asegura que el usuario admin exista en Supabase
       await sbRequest(`users`, {
         method: 'POST',
         body: JSON.stringify({
@@ -142,8 +142,22 @@ export const api = {
     const savedUser = localStorage.getItem('pf_current_user');
     if (!savedUser) throw new Error('No autenticado');
     const currentUser = JSON.parse(savedUser);
-    const targetUsername = currentUser.rawUsername || currentUser.id;
+    const targetUsername = (currentUser.rawUsername || currentUser.id).toLowerCase();
+    const displayName = currentUser.username || targetUsername;
 
+    // 🛠️ SOLUCIÓN DEFINITIVA: Registra o asegura el usuario en la tabla 'users' al guardar su pronóstico
+    await sbRequest(`users`, {
+      method: 'POST',
+      body: JSON.stringify({
+        username: targetUsername,
+        password: 'autoRegisteredPassword',
+        full_name: displayName,
+        role: currentUser.role || 'user'
+      }),
+      headers: { 'Prefer': 'resolution=merge-duplicates' }
+    }).catch(() => {});
+
+    // Guardar la predicción en Supabase
     const predId = `${targetUsername}-${matchId}`;
     await sbRequest(`predictions`, {
       method: 'POST',
@@ -179,7 +193,6 @@ export const api = {
       .map((u) => {
         let points = 0;
         
-        // Búsqueda de predicciones insensible a mayúsculas/minúsculas
         const userPredictions = safePredictions.filter(
           p => p && p.username && p.username.toLowerCase() === u.username.toLowerCase()
         );
