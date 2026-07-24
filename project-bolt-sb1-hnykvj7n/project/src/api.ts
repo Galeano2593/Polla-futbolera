@@ -124,10 +124,12 @@ export const api = {
     const savedUser = localStorage.getItem('pf_current_user');
     if (!savedUser) return { predictions: [] };
     const currentUser = JSON.parse(savedUser);
-    const targetUsername = currentUser.rawUsername || currentUser.id;
+    
+    // Normalizar usuario a minúsculas
+    const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
 
-    const predictions = await sbRequest<any[]>(`predictions?username=eq.${targetUsername}&select=*`);
-    const mapped = (predictions || []).map(p => ({
+    const predictions = await sbRequest<any[]>(`predictions?username=eq.${encodeURIComponent(targetUsername)}&select=*`);
+    const mapped: Prediction[] = (predictions || []).map(p => ({
       id: p.id,
       matchId: p.match_id,
       userId: p.username,
@@ -142,10 +144,12 @@ export const api = {
     const savedUser = localStorage.getItem('pf_current_user');
     if (!savedUser) throw new Error('No autenticado');
     const currentUser = JSON.parse(savedUser);
-    const targetUsername = (currentUser.rawUsername || currentUser.id).toLowerCase();
+    
+    // Normalizar usuario a minúsculas
+    const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
     const displayName = currentUser.username || targetUsername;
 
-    // Registra o asegura el usuario en la tabla 'users'
+    // 1. Asegurar registro del usuario en 'users'
     await sbRequest(`users`, {
       method: 'POST',
       body: JSON.stringify({
@@ -157,7 +161,7 @@ export const api = {
       headers: { 'Prefer': 'resolution=merge-duplicates' }
     }).catch(() => {});
 
-    // Guardar la predicción en Supabase
+    // 2. Guardar predicción
     const predId = `${targetUsername}-${matchId}`;
     await sbRequest(`predictions`, {
       method: 'POST',
@@ -187,14 +191,14 @@ export const api = {
     const safeMatches = Array.isArray(matches) ? matches : [];
     const safePredictions = Array.isArray(allPredictions) ? allPredictions : [];
 
-    // Filtra para mostrar usuarios que no sean administradores
     const leaderboard: LeaderboardRow[] = safeUsers
       .filter(u => u && u.username && u.username.toLowerCase() !== 'admin' && u.role !== 'admin')
       .map((u) => {
         let points = 0;
+        const normalizedUsername = String(u.username).trim().toLowerCase();
         
         const userPredictions = safePredictions.filter(
-          p => p && p.username && p.username.toLowerCase() === u.username.toLowerCase()
+          p => p && p.username && String(p.username).trim().toLowerCase() === normalizedUsername
         );
 
         userPredictions.forEach(p => {
@@ -227,7 +231,7 @@ export const api = {
 
         return {
           rank: 0,
-          userId: u.username,
+          userId: normalizedUsername,
           username: u.full_name || u.username,
           points,
           played: userPredictions.length,
@@ -276,7 +280,6 @@ export const api = {
     return { match: {} as any, predictionsUpdated: 1 };
   },
 
-  // 🕒 NVO: Permite cambiar la fecha u hora de un partido (aplazamientos o cambios de horario)
   adminUpdateMatchKickoff: async (matchId: string, newKickoff: string) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
       method: 'PATCH',
@@ -291,7 +294,8 @@ export const api = {
   },
 
   adminDeleteUser: async (usernameToDelete: string) => {
-    await sbRequest(`users?username=eq.${usernameToDelete}`, {
+    const cleanUser = usernameToDelete.trim().toLowerCase();
+    await sbRequest(`users?username=eq.${cleanUser}`, {
       method: 'DELETE'
     });
     return { success: true };
