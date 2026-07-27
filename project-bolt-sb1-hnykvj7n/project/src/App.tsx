@@ -5,7 +5,8 @@ import AuthView from '@/views/AuthView';
 import PredictionsView from '@/views/PredictionsView';
 import LeaderboardView from '@/views/LeaderboardView';
 import AdminView from '@/views/Adminview';
-import RulesView from '@/views/RulesView'; // Importación de la nueva vista de reglas
+import RulesView from '@/views/RulesView';
+import HistoryView from '@/views/HistoryView'; // 👈 1. Importación de la vista de historial
 import { useAuth } from '@/context/AuthContext';
 import type { ReactNode } from 'react';
 
@@ -42,8 +43,9 @@ export default function App() {
             }
           >
             <Route path="predictions" element={<PredictionsView />} />
+            <Route path="history" element={<HistoryView />} /> {/* 👈 2. Nueva ruta declarada */}
             <Route path="leaderboard" element={<LeaderboardView />} />
-            <Route path="rules" element={<RulesView />} /> {/* Enlace de la ruta de reglas */}
+            <Route path="rules" element={<RulesView />} />
             
             {/* Ruta exclusiva del Administrador */}
             <Route
@@ -63,4 +65,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-
