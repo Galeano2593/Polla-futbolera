@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import type { Match } from '@/types';
-import { PlusCircle, Calendar, Check, AlertCircle, RefreshCw, Clock, Edit3 } from 'lucide-react';
+import { PlusCircle, Calendar, Check, AlertCircle, RefreshCw, Clock, Edit3, Ban } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 export default function AdminView() {
@@ -114,7 +114,28 @@ export default function AdminView() {
     }
   }
 
-  // 3. Cambiar fecha / hora de un partido (Aplazamiento / Cambio de última hora)
+  // 3. Anular / Cancelar Partido
+  async function handleCancelMatch(matchId: string) {
+    if (!window.confirm('¿Estás seguro de anular este partido? Ningún pronóstico otorgará puntos.')) {
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      await api.adminCancelMatch(matchId);
+      setSuccess('¡Partido anulado correctamente!');
+      await loadMatches();
+    } catch (err) {
+      setError('Error al anular el partido');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 4. Cambiar fecha / hora de un partido (Aplazamiento / Cambio de última hora)
   async function handleUpdateKickoff(matchId: string) {
     const newKickoff = editingKickoff[matchId];
     if (!newKickoff) return;
@@ -143,7 +164,7 @@ export default function AdminView() {
     }
   }
 
-  const scheduledMatches = matches.filter((m) => m.status !== 'finished');
+  const scheduledMatches = matches.filter((m) => m.status !== 'finished' && m.status !== 'cancelled');
   const finishedMatches = matches.filter((m) => m.status === 'finished');
 
   return (
@@ -290,14 +311,26 @@ export default function AdminView() {
                   <span className="flex-1 text-left text-sm font-semibold truncate">
                     {match.awayTeam}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => handleSetResult(match.id)}
-                    disabled={busy}
-                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow"
-                  >
-                    <Check className="w-3.5 h-3.5" /> Cerrar
-                  </button>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSetResult(match.id)}
+                      disabled={busy}
+                      className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Cerrar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelMatch(match.id)}
+                      disabled={busy}
+                      className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-bold text-xs rounded-xl flex items-center gap-1 shadow"
+                      title="Anular este partido"
+                    >
+                      <Ban className="w-3.5 h-3.5" /> Anular
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
@@ -347,14 +380,26 @@ export default function AdminView() {
                 <span className="flex-1 text-left text-sm font-semibold truncate text-slate-300">
                   {match.awayTeam}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => handleSetResult(match.id)}
-                  disabled={busy}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1 shadow"
-                >
-                  <Edit3 className="w-3.5 h-3.5" /> Corregir
-                </button>
+                
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSetResult(match.id)}
+                    disabled={busy}
+                    className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1 shadow"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Corregir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCancelMatch(match.id)}
+                    disabled={busy}
+                    className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-bold text-xs rounded-xl flex items-center gap-1 shadow"
+                    title="Anular este partido"
+                  >
+                    <Ban className="w-3.5 h-3.5" /> Anular
+                  </button>
+                </div>
               </div>
             ))}
           </div>
