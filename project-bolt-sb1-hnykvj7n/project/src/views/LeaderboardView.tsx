@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import type { LeaderboardRow, Match, Prediction } from '@/types';
-import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye, Lock, Crown, Flame, Target } from 'lucide-react';
+import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye, Lock, Crown, Flame } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 type ExtendedLeaderboardRow = LeaderboardRow & {
@@ -227,22 +227,22 @@ export default function LeaderboardView() {
 
                           {/* 👑 INSIGNIA: LÍDER */}
                           {isLeader && (
-                            <span className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 shadow-sm">
+                            <span className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-sm">
                               <Crown className="w-2.5 h-2.5 text-yellow-400" /> Líder
                             </span>
                           )}
 
                           {/* 🔥 INSIGNIA: RACHA (2 o más marcadores exactos seguidos) */}
                           {(row.streak ?? 0) >= 2 && (
-                            <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 animate-pulse">
+                            <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 animate-pulse shadow-sm">
                               <Flame className="w-2.5 h-2.5 text-orange-400 fill-orange-400" /> {row.streak} en racha
                             </span>
                           )}
 
                           {/* 🎯 INSIGNIA: EFECTIVIDAD (si jugó al menos 2 partidos) */}
                           {row.played >= 2 && (row.accuracy ?? 0) > 0 && (
-                            <span className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5">
-                              <Target className="w-2.5 h-2.5 text-emerald-400" /> {row.accuracy}% efectividad
+                            <span className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 shadow-sm">
+                              <span className="text-[11px] leading-none">🎯</span> {row.accuracy}% efectividad
                             </span>
                           )}
 
