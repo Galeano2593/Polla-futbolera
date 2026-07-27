@@ -1,26 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api } from '@/api';
 import type { Match, Prediction } from '@/types';
-import { Calendar, Save, CheckCircle, Lock } from 'lucide-react';
+import { Calendar, CheckCircle, Lock, Loader2 } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
+
+type SaveState = 'idle' | 'saving' | 'saved';
 
 export default function PredictionsView() {
   const [matches, setMatches] = useState<Match[]>([]);
-  const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [scores, setScores] = useState<Record<string, { home: string; away: string }>>({});
   const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
+  const [savingState, setSavingState] = useState<Record<string, SaveState>>({});
   const [loading, setLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+
+  // Ref para almacenar los temporizadores de autosave por partido
+  const autoSaveTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
   useEffect(() => {
     async function loadData() {
       try {
         const [mRes, pRes] = await Promise.all([api.getMatches(), api.getPredictions()]);
         setMatches(mRes.matches);
-        setPredictions(pRes.predictions);
 
         const initialScores: Record<string, { home: string; away: string }> = {};
         const initialSaved: Record<string, boolean> = {};
+        const initialSaveStates: Record<string, SaveState> = {};
 
         pRes.predictions.forEach((p) => {
           initialScores[p.matchId] = {
@@ -28,10 +32,12 @@ export default function PredictionsView() {
             away: p.awayScore.toString(),
           };
           initialSaved[p.matchId] = true;
+          initialSaveStates[p.matchId] = 'saved';
         });
 
         setScores(initialScores);
         setSavedStatus(initialSaved);
+        setSavingState(initialSaveStates);
       } catch (err) {
         console.error(err);
       } finally {
@@ -39,55 +45,75 @@ export default function PredictionsView() {
       }
     }
     loadData();
+
+    // Limpiar temporizadores si el componente se desmonta
+    return () => {
+      Object.values(autoSaveTimers.current).forEach((timer) => clearTimeout(timer));
+    };
   }, []);
 
-  async function handleSave(matchId: string) {
-    const matchScore = scores[matchId];
-    if (!matchScore || matchScore.home === '' || matchScore.away === '') return;
+  // Función interna para guardar el marcador
+  async function triggerSave(matchId: string, homeVal: string, awayVal: string) {
+    if (homeVal === '' || awayVal === '') return;
 
-    setIsSaving(true);
+    setSavingState((prev) => ({ ...prev, [matchId]: 'saving' }));
     try {
       await api.savePrediction(
         matchId,
-        parseInt(matchScore.home, 10),
-        parseInt(matchScore.away, 10)
+        parseInt(homeVal, 10),
+        parseInt(awayVal, 10)
       );
-      // Marcar como guardado
       setSavedStatus((prev) => ({ ...prev, [matchId]: true }));
+      setSavingState((prev) => ({ ...prev, [matchId]: 'saved' }));
     } catch (err) {
       console.error(err);
-    } finally {
-      setIsSaving(false);
+      setSavingState((prev) => ({ ...prev, [matchId]: 'idle' }));
     }
   }
 
   function handleScoreChange(matchId: string, side: 'home' | 'away', value: string) {
-    // 🔒 SI YA ESTÁ GUARDADO, NO PERMITIR CAMBIOS
+    // 🔒 Si ya está guardado o cerrado, no permite edición
     if (savedStatus[matchId]) return;
 
     if (value !== '' && !/^\d+$/.test(value)) return;
-    
+
+    // Actualizar estado local del score
+    const currentMatchScores = scores[matchId] || { home: '', away: '' };
+    const updatedScores = {
+      ...currentMatchScores,
+      [side]: value,
+    };
+
     setScores((prev) => ({
       ...prev,
-      [matchId]: {
-        ...prev[matchId],
-        [side]: value,
-      },
+      [matchId]: updatedScores,
     }));
+
+    // Cancelar el temporizador anterior si existía para este partido
+    if (autoSaveTimers.current[matchId]) {
+      clearTimeout(autoSaveTimers.current[matchId]);
+    }
+
+    // Si ambos campos tienen un valor numérico válido, programar el Autosave (Debounce de 800ms)
+    if (updatedScores.home !== '' && updatedScores.away !== '') {
+      autoSaveTimers.current[matchId] = setTimeout(() => {
+        triggerSave(matchId, updatedScores.home, updatedScores.away);
+      }, 800);
+    }
   }
 
   if (loading) {
     return <LoadingSoccer message="Cargando partidos de la fecha..." />;
   }
 
-  // Filtrar partidos que NO están finalizados
+  // Filtrar partidos que NO estén finalizados
   const activeMatches = matches.filter((m) => m.status !== 'finished');
 
   return (
     <div className="space-y-6">
       <div className="text-center sm:text-left mb-2">
         <h2 className="text-2xl font-bold text-white tracking-tight">Mis Predicciones</h2>
-        <p className="text-slate-400 text-sm mt-1">Ingresa tus marcadores antes del inicio de cada partido</p>
+        <p className="text-slate-400 text-sm mt-1">Ingresa tus marcadores; se guardarán automáticamente</p>
       </div>
 
       <div className="grid gap-4 w-full px-1">
@@ -98,21 +124,22 @@ export default function PredictionsView() {
         ) : (
           activeMatches.map((match) => {
             const isSaved = !!savedStatus[match.id];
-            const hasScores = scores[match.id]?.home !== '' && scores[match.id]?.away !== '' && scores[match.id]?.home !== undefined;
-            
+            const currentState = savingState[match.id] || 'idle';
+
             const hasStarted = new Date(match.kickoff) <= new Date();
             const isFinished = match.status === 'finished';
-            
-            // 🔒 Regla de Bloqueo Total: Partido finalizado, iniciado O YA GUARDADO por el usuario
+
+            // 🔒 Regla de bloqueo: Finalizado, en juego o ya guardado
             const isLocked = isFinished || hasStarted || isSaved;
 
             return (
               <div
                 key={match.id}
                 className={`bg-slate-900/60 backdrop-blur-xl border ${
-                  isSaved ? 'border-emerald-500/30' : 'border-slate-800/80'
+                  isSaved ? 'border-emerald-500/30 shadow-emerald-500/5' : 'border-slate-800/80'
                 } rounded-2xl p-4 sm:p-5 shadow-xl transition-all w-full overflow-hidden`}
               >
+                {/* Header de la tarjeta */}
                 <div className="flex justify-between items-center text-xs text-slate-400 mb-4 border-b border-slate-800/50 pb-2">
                   <div className="flex items-center gap-1.5 font-medium">
                     <Calendar className="w-3.5 h-3.5 text-emerald-400" />
@@ -137,13 +164,14 @@ export default function PredictionsView() {
                   </span>
                 </div>
 
+                {/* Marcadores y Equipos */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div className="flex flex-1 items-center justify-center gap-2 sm:gap-4 w-full overflow-hidden">
                     <div className="flex-1 text-right font-semibold text-sm sm:text-base text-slate-100 truncate">
                       {match.homeTeam}
                     </div>
 
-                    {/* Cajas de Marcadores */}
+                    {/* Cajas de Entrada de Marcador */}
                     <div className="flex items-center gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-slate-800">
                       <input
                         type="text"
@@ -151,7 +179,7 @@ export default function PredictionsView() {
                         pattern="[0-9]*"
                         value={scores[match.id]?.home ?? ''}
                         onChange={(e) => handleScoreChange(match.id, 'home', e.target.value)}
-                        disabled={isLocked} // 🔒 SE DESHABILITA SI YA ESTÁ GUARDADO O EN JUEGO
+                        disabled={isLocked}
                         className={`w-10 h-10 text-center border rounded-lg text-lg font-bold focus:outline-none transition ${
                           isLocked
                             ? 'bg-slate-950/90 text-emerald-400 border-slate-800/80 cursor-not-allowed opacity-90'
@@ -166,7 +194,7 @@ export default function PredictionsView() {
                         pattern="[0-9]*"
                         value={scores[match.id]?.away ?? ''}
                         onChange={(e) => handleScoreChange(match.id, 'away', e.target.value)}
-                        disabled={isLocked} // 🔒 SE DESHABILITA SI YA ESTÁ GUARDADO O EN JUEGO
+                        disabled={isLocked}
                         className={`w-10 h-10 text-center border rounded-lg text-lg font-bold focus:outline-none transition ${
                           isLocked
                             ? 'bg-slate-950/90 text-emerald-400 border-slate-800/80 cursor-not-allowed opacity-90'
@@ -181,49 +209,35 @@ export default function PredictionsView() {
                     </div>
                   </div>
 
-                  {/* Botón de Estado / Acción */}
-                  {isFinished || hasStarted ? (
-                    <div className="bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-medium text-slate-400 flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-amber-500" />
-                      {isFinished ? (
-                        <span>Resultado: <strong className="text-yellow-400">{match.homeScore} - {match.awayScore}</strong></span>
-                      ) : (
-                        <span>Cerrado por horario</span>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleSave(match.id)}
-                      disabled={!hasScores || isSaved}
-                      className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 border ${
-                        isSaved
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 cursor-not-allowed opacity-80'
-                          : !hasScores
-                          ? 'bg-slate-800 text-slate-500 border-slate-700/30 cursor-not-allowed'
-                          : 'bg-emerald-500 hover:bg-emerald-400 text-white border-emerald-400/20 shadow-lg shadow-emerald-500/20'
-                      }`}
-                    >
-                      {isSaved ? (
-                        <>
-                          <CheckCircle className="w-4 h-4 text-emerald-400" />
-                          <span>Guardado</span>
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4" />
-                          <span>Guardar</span>
-                        </>
-                      )}
-                    </button>
-                  )}
+                  {/* Insignia de Estado de Autosave */}
+                  <div className="w-full sm:w-auto flex justify-center items-center min-w-[110px]">
+                    {hasStarted || isFinished ? (
+                      <div className="bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-medium text-slate-400 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Cerrado</span>
+                      </div>
+                    ) : currentState === 'saving' ? (
+                      <div className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Guardando...</span>
+                      </div>
+                    ) : currentState === 'saved' ? (
+                      <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Guardado</span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-500 italic">
+                        Ingresa ambos marcadores
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })
         )}
       </div>
-
-      {isSaving && <LoadingSoccer message="Guardando tu pronóstico..." />}
     </div>
   );
 }
