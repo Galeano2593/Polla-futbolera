@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import type { LeaderboardRow, Match, Prediction } from '@/types';
-import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye, Lock, Crown, Flame } from 'lucide-react';
+import { Trophy, User, Hash, Trash2, ChevronDown, ChevronUp, Eye, Lock, Crown, Flame, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 type ExtendedLeaderboardRow = LeaderboardRow & {
   rawUsername?: string;
   streak?: number;
   accuracy?: number;
+  previousRank?: number; // Para la tendencia de posición
 };
 
 export default function LeaderboardView() {
@@ -32,14 +33,12 @@ export default function LeaderboardView() {
       const [res, mRes, pRes, uRes] = await Promise.all([
         api.getLeaderboard(),
         api.getMatches(),
-        // Consultar predicciones directamente
         fetch('https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/predictions?select=*', {
           headers: {
             'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
             'Authorization': 'Bearer sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI'
           }
         }).then(r => r.json()).catch(() => []),
-        // Consultar usuarios directamente para extraer sus nombres reales registrados
         fetch('https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/users?select=*', {
           headers: {
             'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
@@ -76,12 +75,44 @@ export default function LeaderboardView() {
         setUsersMap(map);
       }
 
-      // Ordenar partidos finalizados por fecha para el cálculo de rachas
+      // Ordenar partidos finalizados por fecha para el cálculo de rachas y posiciones anteriores
       const finishedMatches = rawMatches
         .filter(m => m.status === 'finished' && m.homeScore !== undefined && m.awayScore !== undefined)
         .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
 
-      // Calcular Racha (🔥) y Efectividad (🎯) para cada jugador
+      // --- CÁLCULO DE POSICIÓN PREVIA (HASTA EL PENÚLTIMO PARTIDO FINALIZADO) ---
+      const previousScores: Record<string, number> = {};
+      if (finishedMatches.length > 1) {
+        const matchesExceptLast = finishedMatches.slice(0, -1);
+        matchesExceptLast.forEach(match => {
+          rawPredictions.filter(p => p.matchId === match.id).forEach(pred => {
+            if (pred.homeScore !== undefined && pred.awayScore !== undefined) {
+              const isExact = pred.homeScore === match.homeScore && pred.awayScore === match.awayScore;
+              const realResult = Math.sign((match.homeScore ?? 0) - (match.awayScore ?? 0));
+              const predResult = Math.sign(pred.homeScore - pred.awayScore);
+              const isHit = realResult === predResult;
+
+              let pts = 0;
+              if (isExact) pts = 3;
+              else if (isHit) pts = 1;
+
+              previousScores[pred.userId] = (previousScores[pred.userId] || 0) + pts;
+            }
+          });
+        });
+      }
+
+      // Generar ranking previo ordenado
+      const previousRanksMap: Record<string, number> = {};
+      if (finishedMatches.length > 1) {
+        const sortedPrev = Object.entries(previousScores)
+          .sort(([, ptsA], [, ptsB]) => ptsB - ptsA);
+        sortedPrev.forEach(([uId], idx) => {
+          previousRanksMap[uId] = idx + 1;
+        });
+      }
+
+      // --- CÁLCULO DE RACHA (🔥), EFECTIVIDAD (🎯) Y ENRIQUECIMIENTO DE LA TABLA ---
       const enrichedLeaderboard: ExtendedLeaderboardRow[] = (res.leaderboard || []).map((row: LeaderboardRow) => {
         const uId = String((row as any).rawUsername || row.userId).trim().toLowerCase();
         const userPreds = rawPredictions.filter(p => p.userId === uId);
@@ -90,15 +121,12 @@ export default function LeaderboardView() {
         let successfulMatches = 0;
         let totalFinishedPlayed = 0;
 
-        // Evaluar en orden cronológico
         finishedMatches.forEach(match => {
           const pred = userPreds.find(p => p.matchId === match.id);
           if (pred && pred.homeScore !== undefined && pred.awayScore !== undefined) {
             totalFinishedPlayed++;
             
             const isExact = pred.homeScore === match.homeScore && pred.awayScore === match.awayScore;
-            
-            // Evaluar si acertó al menos el ganador/empate
             const realResult = Math.sign((match.homeScore ?? 0) - (match.awayScore ?? 0));
             const predResult = Math.sign(pred.homeScore - pred.awayScore);
             const isHit = realResult === predResult;
@@ -107,11 +135,10 @@ export default function LeaderboardView() {
               successfulMatches++;
             }
 
-            // Para la racha contabilizamos marcadores exactos seguidos
             if (isExact) {
               streak++;
             } else {
-              streak = 0; // Se corta la racha de exactos si falla en un partido posterior
+              streak = 0;
             }
           }
         });
@@ -123,7 +150,8 @@ export default function LeaderboardView() {
         return {
           ...row,
           streak,
-          accuracy
+          accuracy,
+          previousRank: previousRanksMap[uId]
         };
       });
 
@@ -158,6 +186,35 @@ export default function LeaderboardView() {
   function toggleExpandUser(userId: string) {
     const cleanId = String(userId).trim().toLowerCase();
     setExpandedUser(expandedUser === cleanId ? null : cleanId);
+  }
+
+  // Componente auxiliar para renderizar la tendencia de posición
+  function renderTrend(currentRank: number, previousRank?: number) {
+    if (!previousRank) {
+      return <Minus className="w-3.5 h-3.5 text-slate-600" title="Sin cambios previos" />;
+    }
+
+    if (currentRank < previousRank) {
+      const diff = previousRank - currentRank;
+      return (
+        <span className="flex items-center text-emerald-400 font-bold text-xs" title={`Subió ${diff} posición(es)`}>
+          <ArrowUp className="w-3.5 h-3.5" />
+          {diff > 1 && <span className="text-[10px] ml-0.5">{diff}</span>}
+        </span>
+      );
+    }
+
+    if (currentRank > previousRank) {
+      const diff = currentRank - previousRank;
+      return (
+        <span className="flex items-center text-red-400 font-bold text-xs" title={`Bajó ${diff} posición(es)`}>
+          <ArrowDown className="w-3.5 h-3.5" />
+          {diff > 1 && <span className="text-[10px] ml-0.5">{diff}</span>}
+        </span>
+      );
+    }
+
+    return <Minus className="w-3.5 h-3.5 text-slate-600" title="Se mantuvo en la posición" />;
   }
 
   if (loading) {
@@ -205,6 +262,11 @@ export default function LeaderboardView() {
                     onClick={() => toggleExpandUser(rowUserId)}
                   >
                     <div className="flex items-center gap-3">
+                      {/* Flechita / Indicador de Tendencia */}
+                      <div className="w-4 flex justify-center">
+                        {renderTrend(row.rank, row.previousRank)}
+                      </div>
+
                       {/* Icono Puesto / Líder */}
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
                         isLeader
@@ -232,14 +294,14 @@ export default function LeaderboardView() {
                             </span>
                           )}
 
-                          {/* 🔥 INSIGNIA: RACHA (2 o más marcadores exactos seguidos) */}
+                          {/* 🔥 INSIGNIA: RACHA */}
                           {(row.streak ?? 0) >= 2 && (
                             <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 animate-pulse shadow-sm">
                               <Flame className="w-2.5 h-2.5 text-orange-400 fill-orange-400" /> {row.streak} en racha
                             </span>
                           )}
 
-                          {/* 🎯 INSIGNIA: EFECTIVIDAD (si jugó al menos 2 partidos) */}
+                          {/* 🎯 INSIGNIA: EFECTIVIDAD */}
                           {row.played >= 2 && (row.accuracy ?? 0) > 0 && (
                             <span className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 shadow-sm">
                               <span className="text-[11px] leading-none">🎯</span> {row.accuracy}% efectividad
