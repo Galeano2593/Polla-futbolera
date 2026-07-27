@@ -88,7 +88,8 @@ export const api = {
       return { token: 'sb-token-admin', user: adminUser };
     }
 
-    const res = await sbRequest<any[]>(`users?username=eq.${cleanUsername}&select=*`);
+    // 🛠️ Búsqueda flexible (insensible a mayúsculas/minúsculas) y con codificación segura de URL
+    const res = await sbRequest<any[]>(`users?username=ilike.${encodeURIComponent(cleanUsername)}&select=*`);
     
     if (!res || res.length === 0) {
       throw new Error('Usuario o contraseña incorrectos');
@@ -96,7 +97,7 @@ export const api = {
     
     const dbUser = res[0];
 
-    if (dbUser.password !== password) {
+    if (String(dbUser.password).trim() !== String(password).trim()) {
       throw new Error('Usuario o contraseña incorrectos');
     }
 
