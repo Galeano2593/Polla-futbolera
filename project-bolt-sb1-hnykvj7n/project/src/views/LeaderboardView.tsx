@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import type { LeaderboardRow, Match, Prediction } from '@/types';
-import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye, Lock } from 'lucide-react';
+import { Trophy, User, Hash, Star, Trash2, ChevronDown, ChevronUp, Eye, Lock, Crown, Flame, Target } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 type ExtendedLeaderboardRow = LeaderboardRow & {
   rawUsername?: string;
+  streak?: number;
+  accuracy?: number;
 };
 
 export default function LeaderboardView() {
@@ -17,7 +19,7 @@ export default function LeaderboardView() {
   const [usersMap, setUsersMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
-  // Estado para controlar qué usuario tiene el desplegable de partidos abierto (guarda el userId)
+  // Estado para controlar qué usuario tiene el desplegable de partidos abierto
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
   // Normalizar el id/username del usuario autenticado para comparaciones
@@ -46,15 +48,24 @@ export default function LeaderboardView() {
         }).then(r => r.json()).catch(() => [])
       ]);
 
-      setLeaderboard(res.leaderboard);
-      setMatches(mRes.matches);
+      const rawMatches: Match[] = mRes.matches || [];
+      const rawPredictions: Prediction[] = Array.isArray(pRes) ? pRes.map((p: any) => ({
+        id: p.id,
+        matchId: p.match_id,
+        userId: String(p.username).trim().toLowerCase(),
+        homeScore: p.home_score,
+        awayScore: p.away_score,
+        createdAt: p.created_at
+      })) : [];
+
+      setMatches(rawMatches);
+      setAllPredictions(rawPredictions);
 
       // Crear mapa de Username Único -> Nombre Real Completo
+      const map: Record<string, string> = {};
       if (Array.isArray(uRes)) {
-        const map: Record<string, string> = {};
         uRes.forEach((u: any) => {
           const key = String(u.username || '').trim().toLowerCase();
-          // Guarda el nombre completo (full_name o name) o el username como fallback
           const displayName = u.full_name && String(u.full_name).trim() !== '' 
             ? u.full_name 
             : u.name && String(u.name).trim() !== '' 
@@ -65,17 +76,58 @@ export default function LeaderboardView() {
         setUsersMap(map);
       }
 
-      if (Array.isArray(pRes)) {
-        const mappedPreds: Prediction[] = pRes.map((p: any) => ({
-          id: p.id,
-          matchId: p.match_id,
-          userId: String(p.username).trim().toLowerCase(),
-          homeScore: p.home_score,
-          awayScore: p.away_score,
-          createdAt: p.created_at
-        }));
-        setAllPredictions(mappedPreds);
-      }
+      // Ordenar partidos finalizados por fecha para el cálculo de rachas
+      const finishedMatches = rawMatches
+        .filter(m => m.status === 'finished' && m.homeScore !== undefined && m.awayScore !== undefined)
+        .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
+
+      // Calcular Racha (🔥) y Efectividad (🎯) para cada jugador
+      const enrichedLeaderboard: ExtendedLeaderboardRow[] = (res.leaderboard || []).map((row: LeaderboardRow) => {
+        const uId = String((row as any).rawUsername || row.userId).trim().toLowerCase();
+        const userPreds = rawPredictions.filter(p => p.userId === uId);
+
+        let streak = 0;
+        let successfulMatches = 0;
+        let totalFinishedPlayed = 0;
+
+        // Evaluar en orden cronológico
+        finishedMatches.forEach(match => {
+          const pred = userPreds.find(p => p.matchId === match.id);
+          if (pred && pred.homeScore !== undefined && pred.awayScore !== undefined) {
+            totalFinishedPlayed++;
+            
+            const isExact = pred.homeScore === match.homeScore && pred.awayScore === match.awayScore;
+            
+            // Evaluar si acertó al menos el ganador/empate
+            const realResult = Math.sign((match.homeScore ?? 0) - (match.awayScore ?? 0));
+            const predResult = Math.sign(pred.homeScore - pred.awayScore);
+            const isHit = realResult === predResult;
+
+            if (isHit || isExact) {
+              successfulMatches++;
+            }
+
+            // Para la racha contabilizamos marcadores exactos seguidos
+            if (isExact) {
+              streak++;
+            } else {
+              streak = 0; // Se corta la racha de exactos si falla en un partido posterior
+            }
+          }
+        });
+
+        const accuracy = totalFinishedPlayed > 0 
+          ? Math.round((successfulMatches / totalFinishedPlayed) * 100) 
+          : 0;
+
+        return {
+          ...row,
+          streak,
+          accuracy
+        };
+      });
+
+      setLeaderboard(enrichedLeaderboard);
     } catch (err) {
       console.error(err);
     } finally {
@@ -109,7 +161,7 @@ export default function LeaderboardView() {
   }
 
   if (loading) {
-    return <LoadingSoccer message="Actualizando posiciones de la polla..." />;
+    return <LoadingSoccer message="Actualizando posiciones y rachas de la polla..." />;
   }
 
   return (
@@ -130,17 +182,21 @@ export default function LeaderboardView() {
               const rowUserId = String(row.rawUsername || row.userId).trim().toLowerCase();
               const isCurrentUser = currentUserId === rowUserId;
               const isExpanded = expandedUser === rowUserId;
+              const isLeader = row.rank === 1;
 
-              // Obtener el Nombre Real Registrado (se busca en usersMap, luego row.username)
+              // Nombre Real Registrado
               const displayName = usersMap[rowUserId] || row.username;
 
-              // Filtrar predicciones de ESTE usuario específico por su ID único
-              const userPreds = allPredictions.filter(
-                p => p.userId === rowUserId
-              );
+              // Filtrar predicciones de ESTE usuario específico
+              const userPreds = allPredictions.filter(p => p.userId === rowUserId);
 
               return (
-                <div key={rowUserId} className="flex flex-col">
+                <div 
+                  key={rowUserId} 
+                  className={`flex flex-col transition-all ${
+                    isLeader ? 'bg-gradient-to-r from-yellow-500/10 via-slate-900/40 to-yellow-500/5' : ''
+                  }`}
+                >
                   {/* Fila Principal de Información */}
                   <div
                     className={`flex items-center justify-between p-4 transition-colors cursor-pointer ${
@@ -149,24 +205,49 @@ export default function LeaderboardView() {
                     onClick={() => toggleExpandUser(rowUserId)}
                   >
                     <div className="flex items-center gap-3">
+                      {/* Icono Puesto / Líder */}
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
-                        row.rank === 1 
-                          ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' 
+                        isLeader
+                          ? 'bg-gradient-to-br from-yellow-400 to-amber-600 text-slate-950 shadow-lg shadow-yellow-500/20 border border-yellow-300' 
                           : row.rank === 2 
                             ? 'bg-slate-400/20 text-slate-300 border border-slate-400/30'
                             : row.rank === 3
                               ? 'bg-amber-700/20 text-amber-500 border border-amber-700/30'
                               : 'bg-slate-950 text-slate-400 border border-slate-800'
                       }`}>
-                        {row.rank === 1 ? <Star className="w-4 h-4 fill-yellow-400/20" /> : row.rank}
+                        {isLeader ? <Crown className="w-4 h-4 text-slate-950 fill-slate-950" /> : row.rank}
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <User className={`w-4 h-4 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-500'}`} />
-                        <span className={`text-sm font-semibold ${isCurrentUser ? 'text-emerald-400' : 'text-slate-200'}`}>
-                          {displayName} {isCurrentUser && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-1">Tú</span>}
-                        </span>
-                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <User className={`w-3.5 h-3.5 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-500'}`} />
+                          <span className={`text-sm font-semibold ${isCurrentUser ? 'text-emerald-400' : 'text-slate-200'}`}>
+                            {displayName} {isCurrentUser && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-0.5">Tú</span>}
+                          </span>
+
+                          {/* 👑 INSIGNIA: LÍDER */}
+                          {isLeader && (
+                            <span className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 shadow-sm">
+                              <Crown className="w-2.5 h-2.5 text-yellow-400" /> Líder
+                            </span>
+                          )}
+
+                          {/* 🔥 INSIGNIA: RACHA (2 o más marcadores exactos seguidos) */}
+                          {(row.streak ?? 0) >= 2 && (
+                            <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5 animate-pulse">
+                              <Flame className="w-2.5 h-2.5 text-orange-400 fill-orange-400" /> {row.streak} en racha
+                            </span>
+                          )}
+
+                          {/* 🎯 INSIGNIA: EFECTIVIDAD (si jugó al menos 2 partidos) */}
+                          {row.played >= 2 && (row.accuracy ?? 0) > 0 && (
+                            <span className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5">
+                              <Target className="w-2.5 h-2.5 text-emerald-400" /> {row.accuracy}% efectividad
+                            </span>
+                          )}
+
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
+                        </div>
                       </div>
                     </div>
 
