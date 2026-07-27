@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { Trophy, Calendar, LogOut, ShieldAlert, BookOpen } from 'lucide-react';
+import { Trophy, Calendar, LogOut, ShieldAlert, BookOpen, History } from 'lucide-react';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -68,6 +68,18 @@ export default function Layout() {
           </Link>
 
           <Link
+            to="/history"
+            className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
+              location.pathname === '/history'
+                ? 'text-emerald-400 scale-105'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <History className="w-5 h-5" />
+            <span>Historial</span>
+          </Link>
+
+          <Link
             to="/leaderboard"
             className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
               location.pathname === '/leaderboard'
@@ -110,5 +122,3 @@ export default function Layout() {
     </div>
   );
 }
-
-
