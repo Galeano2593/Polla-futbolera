@@ -205,6 +205,12 @@ export const api = {
 
         userPredictions.forEach(p => {
           const match = safeMatches.find(m => m.id === p.match_id);
+
+          // Si el partido fue cancelado/anulado, se ignora completamente para la asignación de puntos
+          if (match && match.status === 'cancelled') {
+            return;
+          }
+
           if (match && match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
             const actualHome = match.home_score;
             const actualAway = match.away_score;
@@ -284,6 +290,21 @@ export const api = {
       }
     });
     return { match: {} as any, predictionsUpdated: 1 };
+  },
+
+  adminCancelMatch: async (matchId: string) => {
+    await sbRequest(`matches?id=eq.${matchId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'cancelled',
+        home_score: null,
+        away_score: null
+      }),
+      headers: {
+        'Prefer': 'return=representation'
+      }
+    });
+    return { success: true };
   },
 
   adminUpdateMatchKickoff: async (matchId: string, newKickoff: string) => {
