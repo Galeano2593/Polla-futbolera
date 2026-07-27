@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import type { Match } from '@/types';
-import { PlusCircle, Calendar, Check, AlertCircle, RefreshCw, Clock, Edit3, Ban } from 'lucide-react';
+import { PlusCircle, Calendar, Check, AlertCircle, RefreshCw, Clock, Edit3, Ban, HelpCircle } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
+
+type ConfirmModalState = {
+  isOpen: boolean;
+  type: 'close' | 'cancel' | null;
+  matchId: string | null;
+  matchName: string;
+};
 
 export default function AdminView() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -20,12 +27,19 @@ export default function AdminView() {
   const [results, setResults] = useState<Record<string, { home: string; away: string }>>({});
   const [editingKickoff, setEditingKickoff] = useState<Record<string, string>>({});
 
+  // Estado para el modal de confirmación
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({
+    isOpen: false,
+    type: null,
+    matchId: null,
+    matchName: '',
+  });
+
   async function loadMatches() {
     try {
       const res = await api.getMatches();
       setMatches(res.matches);
 
-      // Pre-cargar valores en inputs
       const initialResults: Record<string, { home: string; away: string }> = {};
       const initialKickoffs: Record<string, string> = {};
 
@@ -34,7 +48,6 @@ export default function AdminView() {
           home: m.homeScore !== undefined ? String(m.homeScore) : '',
           away: m.awayScore !== undefined ? String(m.awayScore) : '',
         };
-        // Formatear ISO a YYYY-MM-THH:mm para input datetime-local
         if (m.kickoff) {
           const d = new Date(m.kickoff);
           const year = d.getFullYear();
@@ -59,7 +72,55 @@ export default function AdminView() {
     loadMatches();
   }, []);
 
-  // 1. Crear nuevo partido
+  // Abrir modal de confirmación
+  function requestConfirmation(type: 'close' | 'cancel', match: Match) {
+    if (type === 'close') {
+      const res = results[match.id];
+      if (!res || res.home === '' || res.away === '') {
+        setError('Debes ingresar un marcador válido antes de cerrar o corregir.');
+        return;
+      }
+    }
+
+    setError('');
+    setConfirmModal({
+      isOpen: true,
+      type,
+      matchId: match.id,
+      matchName: `${match.homeTeam} vs ${match.awayTeam}`,
+    });
+  }
+
+  // Ejecutar acción tras presionar "Sí" en el modal
+  async function handleConfirmAction() {
+    if (!confirmModal.matchId || !confirmModal.type) return;
+
+    const matchId = confirmModal.matchId;
+    const actionType = confirmModal.type;
+
+    setConfirmModal({ isOpen: false, type: null, matchId: null, matchName: '' });
+    setBusy(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      if (actionType === 'close') {
+        const res = results[matchId];
+        await api.adminSetResult(matchId, parseInt(res.home, 10), parseInt(res.away, 10));
+        setSuccess('¡Marcador guardado con éxito!');
+      } else if (actionType === 'cancel') {
+        await api.adminCancelMatch(matchId);
+        setSuccess('¡Partido anulado correctamente!');
+      }
+      await loadMatches();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ocurrió un error al procesar la solicitud');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Crear nuevo partido
   async function handleCreateMatch(e: React.FormEvent) {
     e.preventDefault();
     if (!homeTeam.trim() || !awayTeam.trim() || !kickoff) return;
@@ -96,46 +157,7 @@ export default function AdminView() {
     }
   }
 
-  // 2. Guardar o corregir marcador
-  async function handleSetResult(matchId: string) {
-    const res = results[matchId];
-    if (!res || res.home === '' || res.away === '') return;
-    setBusy(true);
-    setError('');
-    setSuccess('');
-    try {
-      await api.adminSetResult(matchId, parseInt(res.home, 10), parseInt(res.away, 10));
-      setSuccess('¡Marcador oficial actualizado correctamente!');
-      await loadMatches();
-    } catch (err) {
-      setError('Error al guardar resultado');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // 3. Anular / Cancelar Partido
-  async function handleCancelMatch(matchId: string) {
-    if (!window.confirm('¿Estás seguro de anular este partido? Ningún pronóstico otorgará puntos.')) {
-      return;
-    }
-
-    setBusy(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      await api.adminCancelMatch(matchId);
-      setSuccess('¡Partido anulado correctamente!');
-      await loadMatches();
-    } catch (err) {
-      setError('Error al anular el partido');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // 4. Cambiar fecha / hora de un partido (Aplazamiento / Cambio de última hora)
+  // Cambiar horario
   async function handleUpdateKickoff(matchId: string) {
     const newKickoff = editingKickoff[matchId];
     if (!newKickoff) return;
@@ -168,7 +190,7 @@ export default function AdminView() {
   const finishedMatches = matches.filter((m) => m.status === 'finished');
 
   return (
-    <div className="space-y-8 max-w-2xl mx-auto mb-12 text-slate-200">
+    <div className="space-y-8 max-w-2xl mx-auto mb-12 text-slate-200 relative">
       <div>
         <h2 className="text-2xl font-bold text-white">Panel de Administrador</h2>
         <p className="text-slate-400 text-sm">Gestiona partidos de la Liga BetPlay</p>
@@ -226,7 +248,7 @@ export default function AdminView() {
         </form>
       </div>
 
-      {/* CARGAR RESULTADOS / MODIFICAR HORARIO */}
+      {/* PARTIDOS PROGRAMADOS */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-semibold text-emerald-400 flex items-center gap-2">
@@ -249,7 +271,6 @@ export default function AdminView() {
           ) : (
             scheduledMatches.map((match) => (
               <div key={match.id} className="pt-4 space-y-3">
-                {/* Modificar fecha/hora individual */}
                 <div className="flex items-center justify-between gap-2 bg-slate-950/50 p-2 rounded-xl border border-slate-800/80">
                   <span className="text-xs text-slate-400">Horario programado:</span>
                   <div className="flex items-center gap-2">
@@ -266,7 +287,6 @@ export default function AdminView() {
                       onClick={() => handleUpdateKickoff(match.id)}
                       disabled={busy}
                       className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 font-semibold text-xs rounded-lg border border-slate-700 flex items-center gap-1"
-                      title="Actualizar horario del partido"
                     >
                       <Clock className="w-3 h-3" />
                       Hora
@@ -274,7 +294,6 @@ export default function AdminView() {
                   </div>
                 </div>
 
-                {/* Equipos y Marcador */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                   <span className="flex-1 text-right text-sm font-semibold truncate">
                     {match.homeTeam}
@@ -315,18 +334,17 @@ export default function AdminView() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => handleSetResult(match.id)}
+                      onClick={() => requestConfirmation('close', match)}
                       disabled={busy}
-                      className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow"
+                      className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow transition"
                     >
                       <Check className="w-3.5 h-3.5" /> Cerrar
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleCancelMatch(match.id)}
+                      onClick={() => requestConfirmation('cancel', match)}
                       disabled={busy}
-                      className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-bold text-xs rounded-xl flex items-center gap-1 shadow"
-                      title="Anular este partido"
+                      className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-bold text-xs rounded-xl flex items-center gap-1 shadow transition"
                     >
                       <Ban className="w-3.5 h-3.5" /> Anular
                     </button>
@@ -384,18 +402,17 @@ export default function AdminView() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => handleSetResult(match.id)}
+                    onClick={() => requestConfirmation('close', match)}
                     disabled={busy}
-                    className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1 shadow"
+                    className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1 shadow transition"
                   >
                     <Edit3 className="w-3.5 h-3.5" /> Corregir
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleCancelMatch(match.id)}
+                    onClick={() => requestConfirmation('cancel', match)}
                     disabled={busy}
-                    className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-bold text-xs rounded-xl flex items-center gap-1 shadow"
-                    title="Anular este partido"
+                    className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 font-bold text-xs rounded-xl flex items-center gap-1 shadow transition"
                   >
                     <Ban className="w-3.5 h-3.5" /> Anular
                   </button>
@@ -406,7 +423,57 @@ export default function AdminView() {
         </div>
       )}
 
-      {busy && <LoadingSoccer message="Guardando cambios..." />}
+      {/* 🛑 MODAL FLOTANTE DE CONFIRMACIÓN */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 text-center transform transition-all">
+            <div className="mx-auto w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <HelpCircle className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-lg font-bold text-white">¿Estás seguro?</h4>
+              <p className="text-sm text-slate-300">
+                {confirmModal.type === 'close' ? (
+                  <>
+                    ¿Deseas guardar el resultado final y cerrar el partido{' '}
+                    <strong className="text-amber-400">{confirmModal.matchName}</strong>?
+                  </>
+                ) : (
+                  <>
+                    ¿Deseas <span className="text-red-400 font-bold">ANULAR</span> el partido{' '}
+                    <strong className="text-white">{confirmModal.matchName}</strong>? Ningún
+                    pronóstico sumará puntos.
+                  </>
+                )}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmModal({ isOpen: false, type: null, matchId: null, matchName: '' })}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm transition border border-slate-700"
+              >
+                No, cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAction}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-sm shadow-lg transition text-slate-950 ${
+                  confirmModal.type === 'cancel'
+                    ? 'bg-red-500 hover:bg-red-400 text-white'
+                    : 'bg-emerald-500 hover:bg-emerald-400'
+                }`}
+              >
+                Sí, confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {busy && <LoadingSoccer message="Procesando..." />}
     </div>
   );
 }
