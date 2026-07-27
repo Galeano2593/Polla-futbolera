@@ -18,7 +18,7 @@ export default function Layout() {
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800/60 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto px-4 h-36 sm:h-44 flex items-center justify-between">
           
-          {/* Logo y Nombre de la App */}
+          {/* Logo y Nombre de la App (Tamaño Grande) */}
           <Link to="/predictions" className="flex items-center gap-3 hover:scale-105 transition-transform py-2">
             <img 
               src="/logo.png" 
@@ -27,13 +27,14 @@ export default function Layout() {
             />
           </Link>
 
-          <div className="flex items-center gap-4">
-            <span className="text-xs font-medium bg-slate-800 text-slate-300 px-3 py-1.5 rounded-full border border-slate-700/50">
+          {/* Bloque de Usuario y Salir perfectamente Centrados */}
+          <div className="flex items-center gap-3 sm:gap-4 my-auto">
+            <span className="text-xs font-medium bg-slate-800 text-slate-300 px-3 py-1.5 rounded-full border border-slate-700/50 flex items-center gap-1.5">
               ⚽ {user?.username}
             </span>
             <button
               onClick={handleLogout}
-              className="text-slate-400 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors flex items-center gap-1 text-sm font-medium"
+              className="text-slate-400 hover:text-red-400 p-2 rounded-xl hover:bg-red-500/10 transition-colors flex items-center gap-1.5 text-sm font-medium"
               title="Salir de la polla"
             >
               <LogOut className="w-4 h-4" />
