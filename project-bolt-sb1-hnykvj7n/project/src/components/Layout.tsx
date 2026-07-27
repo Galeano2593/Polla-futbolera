@@ -16,14 +16,14 @@ export default function Layout() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30">
       {/* Encabezado Principal */}
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800/60 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 h-28 sm:h-32 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 h-36 sm:h-44 flex items-center justify-between">
           
           {/* Logo y Nombre de la App */}
           <Link to="/predictions" className="flex items-center gap-3 hover:scale-105 transition-transform py-2">
             <img 
               src="/logo.png" 
               alt="ScoreMaster Logo" 
-              className="h-20 sm:h-24 w-auto object-contain drop-shadow-[0_0_15px_rgba(132,204,22,0.5)]" 
+              className="h-28 sm:h-36 w-auto object-contain drop-shadow-[0_0_18px_rgba(132,204,22,0.5)]" 
             />
           </Link>
 
