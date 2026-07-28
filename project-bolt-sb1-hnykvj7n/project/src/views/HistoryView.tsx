@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import type { Match, Prediction } from '@/types';
-import { Calendar, CheckCircle2, XCircle, Award } from 'lucide-react';
+import { Calendar, Award } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 export default function HistoryView() {
@@ -34,20 +34,20 @@ export default function HistoryView() {
       return { pts: 0, type: 'none', label: 'Sin pronóstico' };
     }
 
-    // Marcador Exacto (3 puntos)
+    // 🎯 Marcador Exacto (10 puntos)
     if (predHome === realHome && predAway === realAway) {
-      return { pts: 3, type: 'exact', label: '+3 Puntos (Exacto)' };
+      return { pts: 10, type: 'exact', label: '+10 Puntos (Exacto)' };
     }
 
-    // Ganador o Empate correcto (1 punto)
+    // ⚽ Ganador o Empate correcto (3 puntos)
     const realResult = Math.sign(realHome - realAway);
     const predResult = Math.sign(predHome - predAway);
 
     if (realResult === predResult) {
-      return { pts: 1, type: 'winner', label: '+1 Punto (Acierto)' };
+      return { pts: 3, type: 'winner', label: '+3 Puntos (Acierto)' };
     }
 
-    // No acertó (0 puntos)
+    // ❌ No acertó (0 puntos)
     return { pts: 0, type: 'miss', label: '0 Puntos' };
   }
 
@@ -93,7 +93,7 @@ export default function HistoryView() {
                     })}
                   </div>
 
-                  {/* Badge de Puntos Obtentidos */}
+                  {/* Badge de Puntos Obtenidos */}
                   <div
                     className={`px-2.5 py-1 rounded-full font-bold text-[11px] flex items-center gap-1 border ${
                       result.type === 'exact'
