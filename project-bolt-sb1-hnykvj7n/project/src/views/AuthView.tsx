@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { Trophy, Goal } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 export default function AuthView() {
@@ -42,8 +42,13 @@ export default function AuthView() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/20 ring-1 ring-emerald-400/30 mb-4">
-            <Goal className="w-8 h-8 text-emerald-400" />
+          {/* Logo reemplazando el icono anterior */}
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-2 mb-3 shadow-lg shadow-emerald-500/10">
+            <img 
+              src="/logo.png" 
+              alt="Polla Futbolera Logo" 
+              className="w-full h-full object-contain"
+            />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Polla Futbolera</h1>
           <p className="text-slate-400 mt-2">Pronostica, compite y escala la tabla</p>
