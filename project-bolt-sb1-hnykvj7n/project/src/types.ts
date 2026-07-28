@@ -4,6 +4,9 @@ export type AuthUser = {
   isAdmin: boolean;
 };
 
+// Ampliamos los estados posibles para el partido
+export type MatchStatus = 'scheduled' | 'finished' | 'suspended' | 'cancelled';
+
 export type Match = {
   id: string;
   homeTeam: string;
@@ -11,7 +14,8 @@ export type Match = {
   kickoff: string;
   homeScore: number | null;
   awayScore: number | null;
-  status: 'scheduled' | 'finished';
+  status: MatchStatus;
+  isDeskWin?: boolean; // Opcional: marca si se resolvió por escritorio / W.O.
   createdAt: string;
 };
 
