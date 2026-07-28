@@ -10,7 +10,7 @@ export default function AuthView() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState(''); // Estado para capturar el nombre real
+  const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -26,7 +26,6 @@ export default function AuthView() {
       if (mode === 'login') {
         await login(cleanUsername, password);
       } else {
-        // Garantizamos el paso explícito del nombre completo como full_name
         // @ts-ignore
         await register(cleanUsername, password, cleanFullName);
       }
@@ -41,17 +40,16 @@ export default function AuthView() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-6">
-          {/* Logo reemplazando el icono anterior */}
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-2 mb-3 shadow-lg shadow-emerald-500/10">
+        
+        {/* Encabezado: Solo el logo en tamaño prominente */}
+        <div className="text-center mb-6 flex justify-center">
+          <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 p-4 shadow-xl shadow-emerald-500/10 flex items-center justify-center">
             <img 
               src="/logo.png" 
-              alt="Polla Futbolera Logo" 
+              alt="Logo" 
               className="w-full h-full object-contain"
             />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Polla Futbolera</h1>
-          <p className="text-slate-400 mt-2">Pronostica, compite y escala la tabla</p>
         </div>
 
         {/* Bandera de Colombia Decorativa */}
@@ -94,7 +92,6 @@ export default function AuthView() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Casilla de Nombre Completo: Solo visible en modo Registro */}
             {mode === 'register' && (
               <div className="animate-fadeIn">
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
@@ -167,7 +164,6 @@ export default function AuthView() {
         </p>
       </div>
 
-      {/* Animación del balón de fútbol cuando está procesando */}
       {busy && (
         <LoadingSoccer 
           message={mode === 'login' ? 'Validando credenciales...' : 'Creando tu cuenta con tu nombre...'} 
