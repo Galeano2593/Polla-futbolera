@@ -113,7 +113,7 @@ export default function LeaderboardView() {
       }
 
       // --- CÁLCULO DE RACHA (🔥), EFECTIVIDAD (🎯) Y ENRIQUECIMIENTO DE LA TABLA ---
-      const enrichedLeaderboard: ExtendedLeaderboardRow[] = (res.leaderboard || []).map((row: LeaderboardRow) => {
+      const enrichedLeaderboard: ExtendedLeaderboardRow[] = (res.leaderboard || []).map((row: LeaderboardRow, idx: number) => {
         const uId = String((row as any).rawUsername || row.userId).trim().toLowerCase();
         const userPreds = rawPredictions.filter(p => p.userId === uId);
 
@@ -149,6 +149,7 @@ export default function LeaderboardView() {
 
         return {
           ...row,
+          rank: row.rank || idx + 1, // Fallback inmediato por si la API no devuelve rank
           streak,
           accuracy,
           previousRank: previousRanksMap[uId]
@@ -188,35 +189,6 @@ export default function LeaderboardView() {
     setExpandedUser(expandedUser === cleanId ? null : cleanId);
   }
 
-  // Componente auxiliar para renderizar la tendencia de posición
-  function renderTrend(currentRank: number, previousRank?: number) {
-    if (!previousRank) {
-      return <Minus className="w-3.5 h-3.5 text-slate-600" title="Sin cambios previos" />;
-    }
-
-    if (currentRank < previousRank) {
-      const diff = previousRank - currentRank;
-      return (
-        <span className="flex items-center text-emerald-400 font-bold text-xs" title={`Subió ${diff} posición(es)`}>
-          <ArrowUp className="w-3.5 h-3.5" />
-          {diff > 1 && <span className="text-[10px] ml-0.5">{diff}</span>}
-        </span>
-      );
-    }
-
-    if (currentRank > previousRank) {
-      const diff = currentRank - previousRank;
-      return (
-        <span className="flex items-center text-red-400 font-bold text-xs" title={`Bajó ${diff} posición(es)`}>
-          <ArrowDown className="w-3.5 h-3.5" />
-          {diff > 1 && <span className="text-[10px] ml-0.5">{diff}</span>}
-        </span>
-      );
-    }
-
-    return <Minus className="w-3.5 h-3.5 text-slate-600" title="Se mantuvo en la posición" />;
-  }
-
   if (loading) {
     return <LoadingSoccer message="Actualizando posiciones y rachas de la polla..." />;
   }
@@ -235,11 +207,12 @@ export default function LeaderboardView() {
           </div>
         ) : (
           <div className="divide-y divide-slate-800/60">
-            {leaderboard.map((row) => {
+            {leaderboard.map((row, index) => {
+              const positionNumber = row.rank || index + 1;
               const rowUserId = String(row.rawUsername || row.userId).trim().toLowerCase();
               const isCurrentUser = currentUserId === rowUserId;
               const isExpanded = expandedUser === rowUserId;
-              const isLeader = row.rank === 1;
+              const isLeader = positionNumber === 1;
 
               // Nombre Real Registrado
               const displayName = usersMap[rowUserId] || row.username;
@@ -262,28 +235,26 @@ export default function LeaderboardView() {
                     onClick={() => toggleExpandUser(rowUserId)}
                   >
                     <div className="flex items-center gap-3">
-                      {/* Flechita / Indicador de Tendencia */}
-                      <div className="w-4 flex justify-center">
-                        {renderTrend(row.rank, row.previousRank)}
-                      </div>
-
-                      {/* 🔢 CASILLA DE POSICIÓN NUMÉRICA - SIEMPRE VISIBLE 🔢 */}
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-smshrink-0 ${
+                      {/* 🔢 RECUADRO DE POSICIÓN / COPITA DEL LÍDER 🔢 */}
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-base shrink-0 shadow-md ${
                         isLeader
-                          ? 'bg-gradient-to-br from-yellow-400 to-amber-600 text-slate-950 shadow-lg shadow-yellow-500/20 border border-yellow-300' 
-                          : row.rank === 2 
-                            ? 'bg-slate-300/20 text-slate-200 border border-slate-400/30'
-                            : row.rank === 3
-                              ? 'bg-amber-700/20 text-amber-500 border border-amber-700/30'
-                              : 'bg-slate-950 text-slate-400 border border-slate-800'
+                          ? 'bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-950 ring-2 ring-yellow-400/60 shadow-yellow-500/20' 
+                          : positionNumber === 2 
+                            ? 'bg-slate-300 text-slate-950 border border-slate-200'
+                            : positionNumber === 3
+                              ? 'bg-amber-600 text-white border border-amber-500'
+                              : 'bg-slate-800/90 text-slate-200 border border-slate-700/80'
                       }`}>
-                        {/* El número de la posición se renderiza aquí de forma forzosa */}
-                        {row.rank}
+                        {isLeader ? (
+                          <Trophy className="w-5 h-5 text-slate-950 fill-slate-950" />
+                        ) : (
+                          positionNumber
+                        )}
                       </div>
 
-                      {/* Icono del Jugador */}
+                      {/* Icono del Jugador / Avatar */}
                       <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
-                        <User className={`w-4 h-4 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-500'}`} />
+                        <User className={`w-4.5 h-4.5 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-400'}`} />
                       </div>
 
                       <div className="flex flex-col">
@@ -321,7 +292,7 @@ export default function LeaderboardView() {
                     <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
                       <div className="text-right">
                         <div className="text-base font-bold text-white flex items-center gap-1.5 justify-end">
-                          <Trophy className={`w-4 h-4 ${isLeader ? 'text-yellow-400 animate-pulse' : 'text-amber-500/80'}`} />
+                          <Trophy className={`w-4 h-4 ${isLeader ? 'text-yellow-400 animate-bounce' : 'text-amber-500/80'}`} />
                           {row.points} <span className="text-xs font-normal text-slate-400">pts</span>
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-0.5 justify-end mt-0.5">
