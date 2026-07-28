@@ -1,4 +1,4 @@
-import { Trophy, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Trophy, Clock, CheckCircle2, AlertCircle, Ban, Scale, AlertTriangle } from 'lucide-react';
 
 export default function RulesView() {
   return (
@@ -52,6 +52,39 @@ export default function RulesView() {
             <div>
               <p className="text-sm font-semibold text-slate-200">Diferencia de Goles</p>
               <p className="text-xs text-slate-400 mt-0.5">Acertar la diferencia exacta de goles entre los equipos, sin importar quién gane o pierda. (Ej: Predicción: 3-1 (+2) | Resultado: 1-3 (+2) o 2-0 (+2)).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tarjeta Casos Especiales y Anulación */}
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-4">
+        <h3 className="text-lg font-semibold text-amber-400 flex items-center gap-2">
+          <AlertTriangle className="w-5 h-5" /> Situaciones Especiales
+        </h3>
+
+        <div className="space-y-3">
+          <div className="flex items-start gap-3 bg-slate-950/40 p-3 rounded-xl border border-slate-800/60">
+            <div className="bg-red-500/20 text-red-400 p-2 rounded-lg shrink-0 mt-0.5">
+              <Ban className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-200">Partidos Suspendidos o Cancelados</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Si un partido se cancela, suspende o anula definitivamente sin jugarse, <strong className="text-amber-300">otorgará 0 puntos</strong> para todos los participantes independientemente del pronóstico ingresado.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 bg-slate-950/40 p-3 rounded-xl border border-slate-800/60">
+            <div className="bg-purple-500/20 text-purple-400 p-2 rounded-lg shrink-0 mt-0.5">
+              <Scale className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-200">Ganado por Escritorio (W.O.)</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Si la autoridad decreta un marcador oficial por sanción o retiro (ej. 3-0 reglamentario), la puntuación <strong className="text-slate-200">se evaluará tomando ese resultado decretado</strong> como el marcador final del partido.
+              </p>
             </div>
           </div>
         </div>
