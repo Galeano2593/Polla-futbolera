@@ -62,9 +62,12 @@ export default function LeaderboardView() {
 
       // Crear mapa de Username Único -> Nombre Real Completo
       const map: Record<string, string> = {};
+      const existingUsernamesInDb: string[] = [];
+
       if (Array.isArray(uRes)) {
         uRes.forEach((u: any) => {
           const key = String(u.username || '').trim().toLowerCase();
+          existingUsernamesInDb.push(key);
           const displayName = u.full_name && String(u.full_name).trim() !== '' 
             ? u.full_name 
             : u.name && String(u.name).trim() !== '' 
@@ -75,16 +78,41 @@ export default function LeaderboardView() {
         setUsersMap(map);
       }
 
+      // 🔄 AUTO-SINCRONIZACIÓN DE USUARIOS EN SUPABASE
+      // Busca usernames presentes en predicciones que NO estén en la tabla users y los guarda
+      const predictorUserIds = Array.from(new Set(rawPredictions.map(p => p.userId)));
+      const missingUsers = predictorUserIds.filter(id => id && !existingUsernamesInDb.includes(id));
+
+      if (missingUsers.length > 0) {
+        Promise.all(
+          missingUsers.map(missingId =>
+            fetch('https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/users', {
+              method: 'POST',
+              headers: {
+                'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+                'Authorization': 'Bearer sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+                'Content-Type': 'application/json',
+                'Prefer': 'resolution=merge-duplicates'
+              },
+              body: JSON.stringify({
+                username: missingId,
+                full_name: missingId,
+                created_at: new Date().toISOString()
+              })
+            })
+          )
+        ).catch(err => console.error('Error al auto-sincronizar usuarios faltantes:', err));
+      }
+
       // Ordenar partidos finalizados por fecha
       const finishedMatches = rawMatches
         .filter(m => m.status === 'finished' && m.homeScore !== undefined && m.awayScore !== undefined)
         .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
 
-      // UNIFICAR USUARIOS: combinamos la API con los usernames que existan en las predicciones
+      // UNIFICAR LISTA: Fusionar API Leaderboard con todos los IDs de las predicciones
       const apiLeaderboard: LeaderboardRow[] = res.leaderboard || [];
-      const predictorUserIds = Array.from(new Set(rawPredictions.map(p => p.userId)));
-
       const baseList: LeaderboardRow[] = [...apiLeaderboard];
+
       predictorUserIds.forEach(pUserId => {
         const exists = baseList.some(r => String((r as any).rawUsername || r.userId).trim().toLowerCase() === pUserId);
         if (!exists) {
@@ -99,7 +127,7 @@ export default function LeaderboardView() {
         }
       });
 
-      // Recalcular puntos con las reglas exactas (+10, +7, +4, +2)
+      // Recalcular puntos con las reglas oficiales (+10, +7, +4, +2)
       const enrichedLeaderboard: ExtendedLeaderboardRow[] = baseList.map((row) => {
         const uId = String((row as any).rawUsername || row.userId).trim().toLowerCase();
         const userPreds = rawPredictions.filter(p => p.userId === uId);
@@ -135,7 +163,7 @@ export default function LeaderboardView() {
             const predDiff = Math.abs(predHome - predAway);
             const isDiffHit = realDiff === predDiff;
 
-            // Evaluar según la jerarquía de reglas
+            // Jerarquía estricta de evaluación
             if (isExact) {
               calculatedPoints += 10;
               successfulMatches++;
@@ -170,7 +198,7 @@ export default function LeaderboardView() {
         };
       });
 
-      // Ordenar descendentemente por puntos y asignar puesto (rank)
+      // Ordenar por puntos y asignar puesto (rank)
       enrichedLeaderboard.sort((a, b) => b.points - a.points);
       enrichedLeaderboard.forEach((item, index) => {
         item.rank = index + 1;
@@ -272,7 +300,7 @@ export default function LeaderboardView() {
                         )}
                       </div>
 
-                      {/* Icono del Jugador / Avatar */}
+                      {/* Avatar */}
                       <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
                         <User className={`w-4.5 h-4.5 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-400'}`} />
                       </div>
