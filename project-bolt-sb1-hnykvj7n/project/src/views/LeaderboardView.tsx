@@ -1,8 +1,9 @@
+
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import type { LeaderboardRow, Match, Prediction } from '@/types';
-import { Trophy, User, Hash, Trash2, ChevronDown, ChevronUp, Eye, Lock, Crown, Flame } from 'lucide-react';
+import { Trophy, Hash, Trash2, ChevronDown, ChevronUp, Eye, Lock, Crown, Flame } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 type ExtendedLeaderboardRow = LeaderboardRow & {
@@ -283,8 +284,8 @@ export default function LeaderboardView() {
                     onClick={() => toggleExpandUser(rowUserId)}
                   >
                     <div className="flex items-center gap-3">
-                      {/* Recuadro de Posición */}
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-base shrink-0 shadow-md ${
+                      {/* Recuadro de Posición (Achicado) */}
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 shadow-md ${
                         isLeader
                           ? 'bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-950 ring-2 ring-yellow-400/60 shadow-yellow-500/20' 
                           : positionNumber === 2 
@@ -294,15 +295,10 @@ export default function LeaderboardView() {
                               : 'bg-slate-800/90 text-slate-200 border border-slate-700/80'
                       }`}>
                         {isLeader ? (
-                          <Trophy className="w-5 h-5 text-slate-950 fill-slate-950" />
+                          <Trophy className="w-4 h-4 text-slate-950 fill-slate-950" />
                         ) : (
                           positionNumber
                         )}
-                      </div>
-
-                      {/* Avatar */}
-                      <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
-                        <User className={`w-4.5 h-4.5 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-400'}`} />
                       </div>
 
                       <div className="flex flex-col">
