@@ -1,4 +1,4 @@
-import type { AuthUser, Match, Prediction, LeaderboardRow } from '@/types';
+import type { AuthUser, Match, Prediction, LeaderboardRow, MatchStatus } from '@/types';
 
 // ==========================================
 // 🛠️ CREDENCIALES DE CONEXIÓN A SUPABASE
@@ -59,7 +59,7 @@ export const api = {
     const user: AuthUser = { 
       id: cleanUsername, 
       username: cleanFullName, 
-      role: role 
+      isAdmin: role === 'admin'
     };
 
     localStorage.setItem('pf_token', `sb-token-${cleanUsername}`);
@@ -82,13 +82,13 @@ export const api = {
         headers: { 'Prefer': 'resolution=merge-duplicates' }
       }).catch(() => {});
 
-      const adminUser: AuthUser = { id: 'admin', username: 'Administrador', role: 'admin' };
+      const adminUser: AuthUser = { id: 'admin', username: 'Administrador', isAdmin: true };
       localStorage.setItem('pf_token', 'sb-token-admin');
       localStorage.setItem('pf_current_user', JSON.stringify({ ...adminUser, rawUsername: 'admin' }));
       return { token: 'sb-token-admin', user: adminUser };
     }
 
-    // 🛠️ Búsqueda flexible (insensible a mayúsculas/minúsculas) y con codificación segura de URL
+    // Búsqueda flexible e insensible a mayúsculas
     const res = await sbRequest<any[]>(`users?username=ilike.${encodeURIComponent(cleanUsername)}&select=*`);
     
     if (!res || res.length === 0) {
@@ -102,7 +102,7 @@ export const api = {
     }
 
     const displayName = dbUser.full_name && dbUser.full_name.trim() !== '' ? dbUser.full_name : dbUser.username;
-    const user: AuthUser = { id: dbUser.username, username: displayName, role: dbUser.role };
+    const user: AuthUser = { id: dbUser.username, username: displayName, isAdmin: dbUser.role === 'admin' };
     
     localStorage.setItem('pf_token', `sb-token-${dbUser.username}`);
     localStorage.setItem('pf_current_user', JSON.stringify({ ...user, rawUsername: dbUser.username }));
@@ -117,6 +117,8 @@ export const api = {
       awayTeam: m.away_team,
       kickoff: m.kickoff,
       status: m.status,
+      isDeskWin: m.is_desk_win || false,
+      createdAt: m.created_at || new Date().toISOString(),
       homeScore: m.home_score !== null ? m.home_score : undefined,
       awayScore: m.away_score !== null ? m.away_score : undefined
     }));
@@ -128,7 +130,6 @@ export const api = {
     if (!savedUser) return { predictions: [] };
     const currentUser = JSON.parse(savedUser);
     
-    // Normalizar usuario a minúsculas
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
 
     const predictions = await sbRequest<any[]>(`predictions?username=eq.${encodeURIComponent(targetUsername)}&select=*`);
@@ -138,7 +139,10 @@ export const api = {
       userId: p.username,
       homeScore: p.home_score,
       awayScore: p.away_score,
-      createdAt: p.created_at
+      points: p.points ?? null,
+      scored: p.scored ?? false,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at || p.created_at
     }));
     return { predictions: mapped };
   },
@@ -148,23 +152,9 @@ export const api = {
     if (!savedUser) throw new Error('No autenticado');
     const currentUser = JSON.parse(savedUser);
     
-    // Normalizar usuario a minúsculas
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
-    const displayName = currentUser.username || targetUsername;
 
-    // 1. Asegurar registro/actualización del usuario en 'users'
-    await sbRequest(`users`, {
-      method: 'POST',
-      body: JSON.stringify({
-        username: targetUsername,
-        password: 'autoRegisteredPassword',
-        full_name: displayName,
-        role: currentUser.role || 'user'
-      }),
-      headers: { 'Prefer': 'resolution=merge-duplicates' }
-    }).catch(() => {});
-
-    // 2. Guardar predicción
+    // Guardar predicción sin modificar o sobreescribir el registro del usuario
     const predId = `${targetUsername}-${matchId}`;
     await sbRequest(`predictions`, {
       method: 'POST',
@@ -179,7 +169,17 @@ export const api = {
     });
 
     return { 
-      prediction: { id: predId, matchId, userId: targetUsername, homeScore, awayScore, createdAt: new Date().toISOString() } 
+      prediction: { 
+        id: predId, 
+        matchId, 
+        userId: targetUsername, 
+        homeScore, 
+        awayScore, 
+        points: null,
+        scored: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } 
     };
   },
 
@@ -194,7 +194,7 @@ export const api = {
     const safeMatches = Array.isArray(matches) ? matches : [];
     const safePredictions = Array.isArray(allPredictions) ? allPredictions : [];
 
-    const leaderboard: (LeaderboardRow & { rawUsername?: string })[] = safeUsers
+    const leaderboard: (LeaderboardRow & { rawUsername?: string; played?: number })[] = safeUsers
       .filter(u => u && u.username && u.username.toLowerCase() !== 'admin' && u.role !== 'admin')
       .map((u) => {
         let points = 0;
@@ -207,12 +207,13 @@ export const api = {
         userPredictions.forEach(p => {
           const match = safeMatches.find(m => m.id === p.match_id);
 
-          // Si el partido fue cancelado/anulado, se ignora completamente para la asignación de puntos
-          if (match && match.status === 'cancelled') {
+          // Si el partido se cancela o se suspende, no se suman ni restan puntos
+          if (!match || match.status === 'cancelled' || match.status === 'suspended') {
             return;
           }
 
-          if (match && match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
+          // Si el partido finalizó (o se ganó por escritorio con marcador asignado)
+          if (match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
             const actualHome = match.home_score;
             const actualAway = match.away_score;
             const predHome = p.home_score;
@@ -238,11 +239,9 @@ export const api = {
           }
         });
 
-        // Retorna el nombre completo de Supabase (full_name) si existe, de lo contrario cae en username
         const displayName = u.full_name && u.full_name.trim() !== '' ? u.full_name : u.username;
 
         return {
-          rank: 0,
           userId: normalizedUsername,
           username: displayName,
           rawUsername: normalizedUsername,
@@ -252,7 +251,6 @@ export const api = {
       });
 
     leaderboard.sort((a, b) => b.points - a.points);
-    leaderboard.forEach((row, i) => row.rank = i + 1);
     return { leaderboard };
   },
 
@@ -275,24 +273,61 @@ export const api = {
       headers: { 'Prefer': 'return=representation' }
     });
     
-    return { match: { id: matchId, homeTeam: data.homeTeam, awayTeam: data.awayTeam, kickoff: data.kickoff, status: 'scheduled' } };
+    return { 
+      match: { 
+        id: matchId, 
+        homeTeam: data.homeTeam, 
+        awayTeam: data.awayTeam, 
+        kickoff: data.kickoff, 
+        status: 'scheduled',
+        createdAt: new Date().toISOString()
+      } 
+    };
   },
 
+  // Asignar resultado normal
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: 'finished',
         home_score: homeScore,
-        away_score: awayScore
+        away_score: awayScore,
+        is_desk_win: false
       }),
-      headers: {
-        'Prefer': 'return=representation'
-      }
+      headers: { 'Prefer': 'return=representation' }
     });
-    return { match: {} as any, predictionsUpdated: 1 };
+    return { success: true };
   },
 
+  // Ganado por escritorio (W.O.): Asigna marcador reglamentario (ej. 3-0) y flag is_desk_win
+  adminSetDeskWinResult: async (matchId: string, homeScore: number, awayScore: number) => {
+    await sbRequest(`matches?id=eq.${matchId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'finished',
+        home_score: homeScore,
+        away_score: awayScore,
+        is_desk_win: true
+      }),
+      headers: { 'Prefer': 'return=representation' }
+    });
+    return { success: true };
+  },
+
+  // Suspender partido (queda congelado temporalmente)
+  adminSuspendMatch: async (matchId: string) => {
+    await sbRequest(`matches?id=eq.${matchId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'suspended'
+      }),
+      headers: { 'Prefer': 'return=representation' }
+    });
+    return { success: true };
+  },
+
+  // Cancelar/Anular partido definitivamente (0 puntos para todos)
   adminCancelMatch: async (matchId: string) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
       method: 'PATCH',
@@ -301,9 +336,7 @@ export const api = {
         home_score: null,
         away_score: null
       }),
-      headers: {
-        'Prefer': 'return=representation'
-      }
+      headers: { 'Prefer': 'return=representation' }
     });
     return { success: true };
   },
@@ -314,9 +347,7 @@ export const api = {
       body: JSON.stringify({
         kickoff: newKickoff
       }),
-      headers: {
-        'Prefer': 'return=representation'
-      }
+      headers: { 'Prefer': 'return=representation' }
     });
     return { success: true };
   },
