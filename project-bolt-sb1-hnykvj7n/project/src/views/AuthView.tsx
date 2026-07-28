@@ -41,12 +41,12 @@ export default function AuthView() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         
-        {/* Encabezado: Logo gigante pegado a la bandera */}
-        <div className="text-center -mb-3 flex justify-center relative z-10">
+        {/* Encabezado: Logo extra grande sin espacio muerto */}
+        <div className="text-center -mb-12 flex justify-center relative z-10">
           <img 
             src="/logo.png" 
             alt="Logo ScoreMaster" 
-            className="w-72 h-72 sm:w-80 sm:h-80 object-contain drop-shadow-[0_12px_30px_rgba(16,185,129,0.35)] transition-transform duration-300 hover:scale-105"
+            className="w-80 h-80 sm:w-96 sm:h-96 object-contain drop-shadow-[0_15px_35px_rgba(16,185,129,0.4)] transition-transform duration-300 hover:scale-105"
           />
         </div>
 
