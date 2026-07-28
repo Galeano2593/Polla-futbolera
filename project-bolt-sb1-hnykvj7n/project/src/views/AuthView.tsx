@@ -41,15 +41,13 @@ export default function AuthView() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         
-        {/* Encabezado: Solo el logo en tamaño prominente */}
-        <div className="text-center mb-6 flex justify-center">
-          <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 p-4 shadow-xl shadow-emerald-500/10 flex items-center justify-center">
-            <img 
-              src="/logo.png" 
-              alt="Logo" 
-              className="w-full h-full object-contain"
-            />
-          </div>
+        {/* Encabezado: Logo gigante sin marco */}
+        <div className="text-center mb-2 flex justify-center">
+          <img 
+            src="/logo.png" 
+            alt="Logo ScoreMaster" 
+            className="w-56 h-56 sm:w-64 sm:h-64 object-contain drop-shadow-[0_10px_25px_rgba(16,185,129,0.3)] transition-transform duration-300 hover:scale-105"
+          />
         </div>
 
         {/* Bandera de Colombia Decorativa */}
