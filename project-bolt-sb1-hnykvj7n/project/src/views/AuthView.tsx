@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+              import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Trophy } from 'lucide-react';
@@ -14,6 +14,28 @@ export default function AuthView() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Función helper para forzar el guardado/sincronización del usuario en Supabase
+  async function syncUserToSupabase(cleanUsername: string, displayName: string) {
+    try {
+      await fetch('https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/users', {
+        method: 'POST',
+        headers: {
+          'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+          'Authorization': 'Bearer sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates' // Evita que falle si el usuario ya existe
+        },
+        body: JSON.stringify({
+          username: cleanUsername,
+          full_name: displayName,
+          created_at: new Date().toISOString()
+        })
+      });
+    } catch (err) {
+      console.error('Error al sincronizar usuario con Supabase:', err);
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
@@ -25,10 +47,23 @@ export default function AuthView() {
     try {
       if (mode === 'login') {
         await login(cleanUsername, password);
+        // Sincronizamos en login por si acaso el registro previo no guardó el perfil en Supabase
+        await syncUserToSupabase(cleanUsername, cleanUsername);
       } else {
         // @ts-ignore
         await register(cleanUsername, password, cleanFullName);
+        // Sincronizamos explícitamente con el nombre completo
+        await syncUserToSupabase(cleanUsername, cleanFullName);
       }
+
+      // Guardamos la referencia limpia en localStorage
+      const userData = {
+        username: cleanUsername,
+        rawUsername: cleanUsername,
+        full_name: cleanFullName
+      };
+      localStorage.setItem('pf_current_user', JSON.stringify(userData));
+
       navigate('/predictions');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al procesar la solicitud');
