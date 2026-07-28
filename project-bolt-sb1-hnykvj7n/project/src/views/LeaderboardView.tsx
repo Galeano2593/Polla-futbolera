@@ -9,7 +9,7 @@ type ExtendedLeaderboardRow = LeaderboardRow & {
   rawUsername?: string;
   streak?: number;
   accuracy?: number;
-  previousRank?: number; // Para la tendencia de posición
+  previousRank?: number;
 };
 
 export default function LeaderboardView() {
@@ -20,10 +20,8 @@ export default function LeaderboardView() {
   const [usersMap, setUsersMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
-  // Estado para controlar qué usuario tiene el desplegable de partidos abierto
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
-  // Normalizar el id/username del usuario autenticado para comparaciones
   const savedUserRaw = localStorage.getItem('pf_current_user');
   const parsedUser = savedUserRaw ? JSON.parse(savedUserRaw) : null;
   const currentUserId = String(parsedUser?.rawUsername || user?.id || user?.username || '').trim().toLowerCase();
@@ -60,7 +58,6 @@ export default function LeaderboardView() {
       setMatches(rawMatches);
       setAllPredictions(rawPredictions);
 
-      // Crear mapa de Username Único -> Nombre Real Completo
       const map: Record<string, string> = {};
       if (Array.isArray(uRes)) {
         uRes.forEach((u: any) => {
@@ -75,12 +72,10 @@ export default function LeaderboardView() {
         setUsersMap(map);
       }
 
-      // Ordenar partidos finalizados por fecha para el cálculo de rachas y posiciones anteriores
       const finishedMatches = rawMatches
         .filter(m => m.status === 'finished' && m.homeScore !== undefined && m.awayScore !== undefined)
         .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
 
-      // --- CÁLCULO DE POSICIÓN PREVIA (HASTA EL PENÚLTIMO PARTIDO FINALIZADO) ---
       const previousScores: Record<string, number> = {};
       if (finishedMatches.length > 1) {
         const matchesExceptLast = finishedMatches.slice(0, -1);
@@ -102,7 +97,6 @@ export default function LeaderboardView() {
         });
       }
 
-      // Generar ranking previo ordenado
       const previousRanksMap: Record<string, number> = {};
       if (finishedMatches.length > 1) {
         const sortedPrev = Object.entries(previousScores)
@@ -112,7 +106,6 @@ export default function LeaderboardView() {
         });
       }
 
-      // --- CÁLCULO DE RACHA (🔥), EFECTIVIDAD (🎯) Y ENRIQUECIMIENTO DE LA TABLA ---
       const enrichedLeaderboard: ExtendedLeaderboardRow[] = (res.leaderboard || []).map((row: LeaderboardRow) => {
         const uId = String((row as any).rawUsername || row.userId).trim().toLowerCase();
         const userPreds = rawPredictions.filter(p => p.userId === uId);
@@ -188,7 +181,6 @@ export default function LeaderboardView() {
     setExpandedUser(expandedUser === cleanId ? null : cleanId);
   }
 
-  // Componente auxiliar para renderizar la tendencia de posición
   function renderTrend(currentRank: number, previousRank?: number) {
     if (!previousRank) {
       return <Minus className="w-3.5 h-3.5 text-slate-600" title="Sin cambios previos" />;
@@ -241,10 +233,7 @@ export default function LeaderboardView() {
               const isExpanded = expandedUser === rowUserId;
               const isLeader = row.rank === 1;
 
-              // Nombre Real Registrado
               const displayName = usersMap[rowUserId] || row.username;
-
-              // Filtrar predicciones de ESTE usuario específico
               const userPreds = allPredictions.filter(p => p.userId === rowUserId);
 
               return (
@@ -254,7 +243,7 @@ export default function LeaderboardView() {
                     isLeader ? 'bg-gradient-to-r from-yellow-500/10 via-slate-900/40 to-yellow-500/5' : ''
                   }`}
                 >
-                  {/* Fila Principal de Información */}
+                  {/* Fila Principal */}
                   <div
                     className={`flex items-center justify-between p-4 transition-colors cursor-pointer ${
                       isCurrentUser ? 'bg-emerald-500/10' : 'hover:bg-slate-800/30'
@@ -262,27 +251,31 @@ export default function LeaderboardView() {
                     onClick={() => toggleExpandUser(rowUserId)}
                   >
                     <div className="flex items-center gap-3">
-                      {/* Flechita / Indicador de Tendencia */}
+                      {/* Indicador de Tendencia (Subió/Bajó) */}
                       <div className="w-4 flex justify-center">
                         {renderTrend(row.rank, row.previousRank)}
                       </div>
 
-                      {/* Icono Puesto / Líder */}
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
+                      {/* 🎖️ CASILLA DE POSICIÓN NUMÉRICA / CORONA DE LÍDER */}
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
                         isLeader
                           ? 'bg-gradient-to-br from-yellow-400 to-amber-600 text-slate-950 shadow-lg shadow-yellow-500/20 border border-yellow-300' 
                           : row.rank === 2 
-                            ? 'bg-slate-400/20 text-slate-300 border border-slate-400/30'
+                            ? 'bg-slate-300/20 text-slate-200 border border-slate-400/30'
                             : row.rank === 3
                               ? 'bg-amber-700/20 text-amber-500 border border-amber-700/30'
-                              : 'bg-slate-950 text-slate-400 border border-slate-800'
+                              : 'bg-slate-950 text-slate-300 border border-slate-800'
                       }`}>
-                        {isLeader ? <Crown className="w-4 h-4 text-slate-950 fill-slate-950" /> : row.rank}
+                        {row.rank}
+                      </div>
+
+                      {/* Avatar del Jugador */}
+                      <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                        <User className={`w-4 h-4 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-400'}`} />
                       </div>
 
                       <div className="flex flex-col">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <User className={`w-3.5 h-3.5 ${isCurrentUser ? 'text-emerald-400' : 'text-slate-500'}`} />
                           <span className={`text-sm font-semibold ${isCurrentUser ? 'text-emerald-400' : 'text-slate-200'}`}>
                             {displayName} {isCurrentUser && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-0.5">Tú</span>}
                           </span>
@@ -314,14 +307,17 @@ export default function LeaderboardView() {
                     </div>
 
                     <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
-                      <div className="text-right">
-                        <div className="text-sm font-bold text-white flex items-center gap-1 justify-end">
-                          <Trophy className="w-3.5 h-3.5 text-yellow-400" />
-                          {row.points} <span className="text-xs font-normal text-slate-400">pts</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 flex items-center gap-0.5 justify-end mt-0.5">
-                          <Hash className="w-2.5 h-2.5" />
-                          {userPreds.length} jugados
+                      <div className="text-right flex items-center gap-2">
+                        {/* 🏆 ICONO DE COPA RESALTADO */}
+                        <Trophy className={`w-5 h-5 ${isLeader ? 'text-yellow-400 animate-bounce' : 'text-amber-500/80'}`} />
+                        <div>
+                          <div className="text-base font-bold text-white flex items-center gap-1 justify-end">
+                            {row.points} <span className="text-xs font-normal text-slate-400">pts</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 flex items-center gap-0.5 justify-end mt-0.5">
+                            <Hash className="w-2.5 h-2.5" />
+                            {userPreds.length} jugados
+                          </div>
                         </div>
                       </div>
 
