@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
@@ -100,7 +99,7 @@ export default function LeaderboardView() {
         }
       });
 
-      // Recalcular puntos con las reglas actualizadas (10 pts exacto, 3 pts acierto)
+      // Recalcular puntos con las reglas exactas (+10, +7, +4, +2)
       const enrichedLeaderboard: ExtendedLeaderboardRow[] = baseList.map((row) => {
         const uId = String((row as any).rawUsername || row.userId).trim().toLowerCase();
         const userPreds = rawPredictions.filter(p => p.userId === uId);
@@ -115,17 +114,42 @@ export default function LeaderboardView() {
           if (pred && pred.homeScore !== undefined && pred.awayScore !== undefined) {
             totalFinishedPlayed++;
             
-            const isExact = pred.homeScore === match.homeScore && pred.awayScore === match.awayScore;
-            const realResult = Math.sign((match.homeScore ?? 0) - (match.awayScore ?? 0));
-            const predResult = Math.sign(pred.homeScore - pred.awayScore);
-            const isHit = realResult === predResult;
+            const realHome = match.homeScore ?? 0;
+            const realAway = match.awayScore ?? 0;
+            const predHome = pred.homeScore;
+            const predAway = pred.awayScore;
 
+            // 1. Marcador Exacto (+10 pts)
+            const isExact = predHome === realHome && predAway === realAway;
+
+            // 2. Acertar Ganador o Empate (+7 pts)
+            const realResult = Math.sign(realHome - realAway);
+            const predResult = Math.sign(predHome - predAway);
+            const isWinnerOrDraw = realResult === predResult;
+
+            // 3. Goles de un Equipo (+4 pts)
+            const isTeamGoalsHit = predHome === realHome || predAway === realAway;
+
+            // 4. Diferencia de Goles (+2 pts)
+            const realDiff = Math.abs(realHome - realAway);
+            const predDiff = Math.abs(predHome - predAway);
+            const isDiffHit = realDiff === predDiff;
+
+            // Evaluar según la jerarquía de reglas
             if (isExact) {
-              calculatedPoints += 10; // 🎯 10 pts por marcador exacto
+              calculatedPoints += 10;
               successfulMatches++;
               streak++;
-            } else if (isHit) {
-              calculatedPoints += 3;  // ⚽ 3 pts por acertar ganador/empate
+            } else if (isWinnerOrDraw) {
+              calculatedPoints += 7;
+              successfulMatches++;
+              streak = 0;
+            } else if (isTeamGoalsHit) {
+              calculatedPoints += 4;
+              successfulMatches++;
+              streak = 0;
+            } else if (isDiffHit) {
+              calculatedPoints += 2;
               successfulMatches++;
               streak = 0;
             } else {
