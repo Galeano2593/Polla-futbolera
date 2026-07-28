@@ -1,15 +1,16 @@
+
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import type { LeaderboardRow, Match, Prediction } from '@/types';
-import { Trophy, User, Hash, Trash2, ChevronDown, ChevronUp, Eye, Lock, Crown, Flame, ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import { Trophy, User, Hash, Trash2, ChevronDown, ChevronUp, Eye, Lock, Crown, Flame } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 type ExtendedLeaderboardRow = LeaderboardRow & {
   rawUsername?: string;
   streak?: number;
   accuracy?: number;
-  previousRank?: number; // Para la tendencia de posición
+  previousRank?: number;
 };
 
 export default function LeaderboardView() {
@@ -75,48 +76,36 @@ export default function LeaderboardView() {
         setUsersMap(map);
       }
 
-      // Ordenar partidos finalizados por fecha para el cálculo de rachas y posiciones anteriores
+      // Ordenar partidos finalizados por fecha
       const finishedMatches = rawMatches
         .filter(m => m.status === 'finished' && m.homeScore !== undefined && m.awayScore !== undefined)
         .sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime());
 
-      // --- CÁLCULO DE POSICIÓN PREVIA (HASTA EL PENÚLTIMO PARTIDO FINALIZADO) ---
-      const previousScores: Record<string, number> = {};
-      if (finishedMatches.length > 1) {
-        const matchesExceptLast = finishedMatches.slice(0, -1);
-        matchesExceptLast.forEach(match => {
-          rawPredictions.filter(p => p.matchId === match.id).forEach(pred => {
-            if (pred.homeScore !== undefined && pred.awayScore !== undefined) {
-              const isExact = pred.homeScore === match.homeScore && pred.awayScore === match.awayScore;
-              const realResult = Math.sign((match.homeScore ?? 0) - (match.awayScore ?? 0));
-              const predResult = Math.sign(pred.homeScore - pred.awayScore);
-              const isHit = realResult === predResult;
+      // UNIFICAR USUARIOS: combinamos la API con los usernames que existan en las predicciones
+      const apiLeaderboard: LeaderboardRow[] = res.leaderboard || [];
+      const predictorUserIds = Array.from(new Set(rawPredictions.map(p => p.userId)));
 
-              let pts = 0;
-              if (isExact) pts = 3;
-              else if (isHit) pts = 1;
-
-              previousScores[pred.userId] = (previousScores[pred.userId] || 0) + pts;
-            }
+      const baseList: LeaderboardRow[] = [...apiLeaderboard];
+      predictorUserIds.forEach(pUserId => {
+        const exists = baseList.some(r => String((r as any).rawUsername || r.userId).trim().toLowerCase() === pUserId);
+        if (!exists) {
+          baseList.push({
+            userId: pUserId,
+            username: map[pUserId] || pUserId,
+            points: 0,
+            played: rawPredictions.filter(p => p.userId === pUserId).length,
+            exactHits: 0,
+            winnerHits: 0
           });
-        });
-      }
+        }
+      });
 
-      // Generar ranking previo ordenado
-      const previousRanksMap: Record<string, number> = {};
-      if (finishedMatches.length > 1) {
-        const sortedPrev = Object.entries(previousScores)
-          .sort(([, ptsA], [, ptsB]) => ptsB - ptsA);
-        sortedPrev.forEach(([uId], idx) => {
-          previousRanksMap[uId] = idx + 1;
-        });
-      }
-
-      // --- CÁLCULO DE RACHA (🔥), EFECTIVIDAD (🎯) Y ENRIQUECIMIENTO DE LA TABLA ---
-      const enrichedLeaderboard: ExtendedLeaderboardRow[] = (res.leaderboard || []).map((row: LeaderboardRow, idx: number) => {
+      // Recalcular puntos con las reglas actualizadas (10 pts exacto, 3 pts acierto)
+      const enrichedLeaderboard: ExtendedLeaderboardRow[] = baseList.map((row) => {
         const uId = String((row as any).rawUsername || row.userId).trim().toLowerCase();
         const userPreds = rawPredictions.filter(p => p.userId === uId);
 
+        let calculatedPoints = 0;
         let streak = 0;
         let successfulMatches = 0;
         let totalFinishedPlayed = 0;
@@ -131,12 +120,14 @@ export default function LeaderboardView() {
             const predResult = Math.sign(pred.homeScore - pred.awayScore);
             const isHit = realResult === predResult;
 
-            if (isHit || isExact) {
-              successfulMatches++;
-            }
-
             if (isExact) {
+              calculatedPoints += 10; // 🎯 10 pts por marcador exacto
+              successfulMatches++;
               streak++;
+            } else if (isHit) {
+              calculatedPoints += 3;  // ⚽ 3 pts por acertar ganador/empate
+              successfulMatches++;
+              streak = 0;
             } else {
               streak = 0;
             }
@@ -149,11 +140,16 @@ export default function LeaderboardView() {
 
         return {
           ...row,
-          rank: row.rank || idx + 1, // Fallback inmediato por si la API no devuelve rank
+          points: calculatedPoints,
           streak,
-          accuracy,
-          previousRank: previousRanksMap[uId]
+          accuracy
         };
+      });
+
+      // Ordenar descendentemente por puntos y asignar puesto (rank)
+      enrichedLeaderboard.sort((a, b) => b.points - a.points);
+      enrichedLeaderboard.forEach((item, index) => {
+        item.rank = index + 1;
       });
 
       setLeaderboard(enrichedLeaderboard);
@@ -235,7 +231,7 @@ export default function LeaderboardView() {
                     onClick={() => toggleExpandUser(rowUserId)}
                   >
                     <div className="flex items-center gap-3">
-                      {/* 🔢 RECUADRO DE POSICIÓN / COPITA DEL LÍDER 🔢 */}
+                      {/* Recuadro de Posición */}
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-base shrink-0 shadow-md ${
                         isLeader
                           ? 'bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-950 ring-2 ring-yellow-400/60 shadow-yellow-500/20' 
@@ -263,21 +259,21 @@ export default function LeaderboardView() {
                             {displayName} {isCurrentUser && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-0.5">Tú</span>}
                           </span>
 
-                          {/* 👑 INSIGNIA: LÍDER */}
+                          {/* INSIGNIA: LÍDER */}
                           {isLeader && (
                             <span className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-sm">
                               <Crown className="w-2.5 h-2.5 text-yellow-400" /> Líder
                             </span>
                           )}
 
-                          {/* 🔥 INSIGNIA: RACHA */}
+                          {/* INSIGNIA: RACHA */}
                           {(row.streak ?? 0) >= 2 && (
                             <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 animate-pulse shadow-sm">
                               <Flame className="w-2.5 h-2.5 text-orange-400 fill-orange-400" /> {row.streak} en racha
                             </span>
                           )}
 
-                          {/* 🎯 INSIGNIA: EFECTIVIDAD */}
+                          {/* INSIGNIA: EFECTIVIDAD */}
                           {row.played >= 2 && (row.accuracy ?? 0) > 0 && (
                             <span className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 shadow-sm">
                               <span className="text-[11px] leading-none">🎯</span> {row.accuracy}% efectividad
