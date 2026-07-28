@@ -217,17 +217,59 @@ export default function LeaderboardView() {
     loadData();
   }, []);
 
+  // 🗑️ ELIMINACIÓN COMPLETA DE USUARIO Y SUS PREDICCIONES
   async function handleDeleteUser(usernameToDelete: string, displayName: string) {
-    const confirmar = window.confirm(`¿Estás seguro de que deseas eliminar al usuario "${displayName}" (${usernameToDelete}) y todos sus pronósticos?`);
+    const confirmar = window.confirm(
+      `¿Estás seguro de que deseas eliminar permanentemente a "${displayName}" (${usernameToDelete})?\n\nEsto borrará sus datos de la base de datos y todas sus predicciones registradas.`
+    );
     if (!confirmar) return;
 
     setLoading(true);
     try {
-      // @ts-ignore
-      await api.adminDeleteUser(usernameToDelete);
+      const cleanUsername = String(usernameToDelete).trim().toLowerCase();
+
+      // 1. Borrar todas sus predicciones asociadas en Supabase
+      await fetch(
+        `https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/predictions?username=eq.${encodeURIComponent(cleanUsername)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+            'Authorization': 'Bearer sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      // 2. Borrar el registro del usuario de la tabla users en Supabase
+      await fetch(
+        `https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/users?username=eq.${encodeURIComponent(cleanUsername)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'apikey': 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+            'Authorization': 'Bearer sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI',
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      // 3. Borrar el usuario en la API / Backend principal si aplica
+      try {
+        // @ts-ignore
+        if (api.adminDeleteUser) {
+          // @ts-ignore
+          await api.adminDeleteUser(cleanUsername);
+        }
+      } catch (apiErr) {
+        console.warn('Eliminado vía Supabase, el backend retornó:', apiErr);
+      }
+
+      // 4. Volver a cargar la información totalmente limpia
       await loadData();
     } catch (err) {
-      console.error(err);
+      console.error('Error al intentar eliminar absolutamente todo del usuario:', err);
+      alert('Ocurrió un problema al intentar eliminar el usuario.');
     } finally {
       setLoading(false);
     }
