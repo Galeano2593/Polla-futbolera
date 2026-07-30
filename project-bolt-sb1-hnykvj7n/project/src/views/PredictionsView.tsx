@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '@/api';
-import type { Match, Prediction } from '@/types';
+import type { Match } from '@/types';
 import { Calendar, CheckCircle, Lock, Loader2 } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
@@ -9,7 +9,6 @@ type SaveState = 'idle' | 'saving' | 'saved';
 export default function PredictionsView() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [scores, setScores] = useState<Record<string, { home: string; away: string }>>({});
-  const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
   const [savingState, setSavingState] = useState<Record<string, SaveState>>({});
   const [loading, setLoading] = useState(true);
 
@@ -23,7 +22,6 @@ export default function PredictionsView() {
         setMatches(mRes.matches);
 
         const initialScores: Record<string, { home: string; away: string }> = {};
-        const initialSaved: Record<string, boolean> = {};
         const initialSaveStates: Record<string, SaveState> = {};
 
         pRes.predictions.forEach((p) => {
@@ -31,12 +29,11 @@ export default function PredictionsView() {
             home: p.homeScore.toString(),
             away: p.awayScore.toString(),
           };
-          initialSaved[p.matchId] = true;
+          // Los marcadores previamente guardados inician en 'saved'
           initialSaveStates[p.matchId] = 'saved';
         });
 
         setScores(initialScores);
-        setSavedStatus(initialSaved);
         setSavingState(initialSaveStates);
       } catch (err) {
         console.error(err);
@@ -46,13 +43,12 @@ export default function PredictionsView() {
     }
     loadData();
 
-    // Limpiar temporizadores si el componente se desmonta
     return () => {
       Object.values(autoSaveTimers.current).forEach((timer) => clearTimeout(timer));
     };
   }, []);
 
-  // Función interna para guardar el marcador
+  // Función interna para guardar el marcador en Supabase
   async function triggerSave(matchId: string, homeVal: string, awayVal: string) {
     if (homeVal === '' || awayVal === '') return;
 
@@ -63,7 +59,6 @@ export default function PredictionsView() {
         parseInt(homeVal, 10),
         parseInt(awayVal, 10)
       );
-      setSavedStatus((prev) => ({ ...prev, [matchId]: true }));
       setSavingState((prev) => ({ ...prev, [matchId]: 'saved' }));
     } catch (err) {
       console.error(err);
@@ -72,12 +67,10 @@ export default function PredictionsView() {
   }
 
   function handleScoreChange(matchId: string, side: 'home' | 'away', value: string) {
-    // 🔒 Si ya está guardado o cerrado, no permite edición
-    if (savedStatus[matchId]) return;
-
+    // Solo permitir dígitos o campo vacío
     if (value !== '' && !/^\d+$/.test(value)) return;
 
-    // Actualizar estado local del score
+    // Actualizar estado local del marcador inmediatamente
     const currentMatchScores = scores[matchId] || { home: '', away: '' };
     const updatedScores = {
       ...currentMatchScores,
@@ -89,16 +82,18 @@ export default function PredictionsView() {
       [matchId]: updatedScores,
     }));
 
-    // Cancelar el temporizador anterior si existía para este partido
+    // Reiniciar temporizador si el usuario sigue tecleando
     if (autoSaveTimers.current[matchId]) {
       clearTimeout(autoSaveTimers.current[matchId]);
     }
 
-    // Si ambos campos tienen un valor numérico válido, programar el Autosave (Debounce de 800ms)
+    // Si ambos campos tienen valor, programar Autosave (800ms debounce)
     if (updatedScores.home !== '' && updatedScores.away !== '') {
       autoSaveTimers.current[matchId] = setTimeout(() => {
         triggerSave(matchId, updatedScores.home, updatedScores.away);
       }, 800);
+    } else {
+      setSavingState((prev) => ({ ...prev, [matchId]: 'idle' }));
     }
   }
 
@@ -106,14 +101,15 @@ export default function PredictionsView() {
     return <LoadingSoccer message="Cargando partidos de la fecha..." />;
   }
 
-  // Filtrar partidos que NO estén finalizados
   const activeMatches = matches.filter((m) => m.status !== 'finished');
 
   return (
     <div className="space-y-6">
       <div className="text-center sm:text-left mb-2">
         <h2 className="text-2xl font-bold text-white tracking-tight">Mis Predicciones</h2>
-        <p className="text-slate-400 text-sm mt-1">Ingresa tus marcadores; se guardarán automáticamente</p>
+        <p className="text-slate-400 text-sm mt-1">
+          Ingresa o modifica tus marcadores; se actualizarán automáticamente.
+        </p>
       </div>
 
       <div className="grid gap-4 w-full px-1">
@@ -123,20 +119,19 @@ export default function PredictionsView() {
           </div>
         ) : (
           activeMatches.map((match) => {
-            const isSaved = !!savedStatus[match.id];
             const currentState = savingState[match.id] || 'idle';
 
             const hasStarted = new Date(match.kickoff) <= new Date();
             const isFinished = match.status === 'finished';
 
-            // 🔒 Regla de bloqueo: Finalizado, en juego o ya guardado
-            const isLocked = isFinished || hasStarted || isSaved;
+            // 🔒 ÚNICA REGLA DE BLOQUEO: Solo se bloquea si el partido arrancó o finalizó
+            const isLocked = isFinished || hasStarted;
 
             return (
               <div
                 key={match.id}
                 className={`bg-slate-900/60 backdrop-blur-xl border ${
-                  isSaved ? 'border-emerald-500/30 shadow-emerald-500/5' : 'border-slate-800/80'
+                  currentState === 'saved' ? 'border-emerald-500/30 shadow-emerald-500/5' : 'border-slate-800/80'
                 } rounded-2xl p-4 sm:p-5 shadow-xl transition-all w-full overflow-hidden`}
               >
                 {/* Header de la tarjeta */}
