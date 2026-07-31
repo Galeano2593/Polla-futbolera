@@ -1,4 +1,4 @@
-import type { AuthUser, Match, Prediction, LeaderboardRow, MatchStatus } from '@/types';
+import type { AuthUser, Match, Prediction, LeaderboardRow } from '@/types';
 
 // ==========================================
 // 🛠️ CREDENCIALES DE CONEXIÓN A SUPABASE
@@ -17,18 +17,18 @@ async function sbRequest<T>(path: string, options: RequestInit = {}): Promise<T>
       ...options.headers,
     },
   });
-  
+
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
     let errData: any = {};
     try { errData = JSON.parse(errText); } catch { errData = {}; }
     throw new Error(errData.message || errData.hint || `Error ${res.status} en la base de datos`);
   }
-  
+
   if (res.status === 204) {
     return {} as T;
   }
-  
+
   const text = await res.text();
   if (!text || text.trim() === '') {
     return {} as T;
@@ -42,7 +42,7 @@ export const api = {
     const cleanUsername = username.trim().toLowerCase();
     const cleanFullName = fullName.trim() || cleanUsername;
     const role = cleanUsername === 'admin' ? 'admin' : 'user';
-    
+
     await sbRequest(`users`, {
       method: 'POST',
       body: JSON.stringify({
@@ -69,7 +69,7 @@ export const api = {
 
   login: async (username: string, password: string) => {
     const cleanUsername = username.trim().toLowerCase();
-    
+
     if (cleanUsername === 'admin' && password === 'admin123') {
       await sbRequest(`users`, {
         method: 'POST',
@@ -90,11 +90,11 @@ export const api = {
 
     // Búsqueda flexible e insensible a mayúsculas
     const res = await sbRequest<any[]>(`users?username=ilike.${encodeURIComponent(cleanUsername)}&select=*`);
-    
+
     if (!res || res.length === 0) {
       throw new Error('Usuario o contraseña incorrectos');
     }
-    
+
     const dbUser = res[0];
 
     if (String(dbUser.password).trim() !== String(password).trim()) {
@@ -102,8 +102,9 @@ export const api = {
     }
 
     const displayName = dbUser.full_name && dbUser.full_name.trim() !== '' ? dbUser.full_name : dbUser.username;
-    const user: AuthUser = { id: dbUser.username, username: displayName, isAdmin: dbUser.role === 'admin' };
-    
+    const isAdmin = dbUser.role === 'admin' || dbUser.username.toLowerCase() === 'admin';
+    const user: AuthUser = { id: dbUser.username, username: displayName, isAdmin };
+
     localStorage.setItem('pf_token', `sb-token-${dbUser.username}`);
     localStorage.setItem('pf_current_user', JSON.stringify({ ...user, rawUsername: dbUser.username }));
     return { token: `sb-token-${dbUser.username}`, user };
@@ -129,11 +130,18 @@ export const api = {
     const savedUser = localStorage.getItem('pf_current_user');
     if (!savedUser) return { predictions: [] };
     const currentUser = JSON.parse(savedUser);
-    
+
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
 
-    const predictions = await sbRequest<any[]>(`predictions?username=eq.${encodeURIComponent(targetUsername)}&select=*`);
-    const mapped: Prediction[] = (predictions || []).map(p => ({
+    // Trae las predicciones coincidiendo por el usuario actual
+    const predictions = await sbRequest<any[]>(`predictions?select=*`);
+    const userPreds = (predictions || []).filter(p => {
+      if (!p || !p.username) return false;
+      const u = String(p.username).trim().toLowerCase();
+      return u === targetUsername || u === String(currentUser.username).trim().toLowerCase();
+    });
+
+    const mapped: Prediction[] = userPreds.map(p => ({
       id: p.id,
       matchId: p.match_id,
       userId: p.username,
@@ -151,10 +159,9 @@ export const api = {
     const savedUser = localStorage.getItem('pf_current_user');
     if (!savedUser) throw new Error('No autenticado');
     const currentUser = JSON.parse(savedUser);
-    
+
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
 
-    // Guardar predicción sin modificar o sobreescribir el registro del usuario
     const predId = `${targetUsername}-${matchId}`;
     await sbRequest(`predictions`, {
       method: 'POST',
@@ -195,31 +202,33 @@ export const api = {
     const safePredictions = Array.isArray(allPredictions) ? allPredictions : [];
 
     const leaderboard: (LeaderboardRow & { rawUsername?: string; played?: number })[] = safeUsers
-      .filter(u => u && u.username && u.username.toLowerCase() !== 'admin' && u.role !== 'admin')
+      .filter(u => u && u.username && String(u.username).toLowerCase() !== 'admin' && u.role !== 'admin')
       .map((u) => {
         let points = 0;
         const normalizedUsername = String(u.username).trim().toLowerCase();
-        
-        const userPredictions = safePredictions.filter(
-          p => p && p.username && String(p.username).trim().toLowerCase() === normalizedUsername
-        );
+        const normalizedFullName = u.full_name ? String(u.full_name).trim().toLowerCase() : '';
+
+        // Búsqueda cruzada por username O full_name para evitar descalces de ID
+        const userPredictions = safePredictions.filter(p => {
+          if (!p || !p.username) return false;
+          const predUser = String(p.username).trim().toLowerCase();
+          return predUser === normalizedUsername || (normalizedFullName !== '' && predUser === normalizedFullName);
+        });
 
         userPredictions.forEach(p => {
           const match = safeMatches.find(m => m.id === p.match_id);
 
-          // Si el partido se cancela o se suspende, no se suman ni restan puntos
           if (!match || match.status === 'cancelled' || match.status === 'suspended') {
             return;
           }
 
-          // Si el partido finalizó (o se ganó por escritorio con marcador asignado)
           if (match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
             const actualHome = Number(match.home_score);
             const actualAway = Number(match.away_score);
             const predHome = Number(p.home_score);
             const predAway = Number(p.away_score);
 
-            // 1. Marcador Exacto (+10 Pts) -> Premio máximo exclusivo
+            // 1. Marcador Exacto (+10 Pts)
             if (predHome === actualHome && predAway === actualAway) {
               points += 10;
             } else {
@@ -232,12 +241,12 @@ export const api = {
                 matchPoints += 7;
               }
 
-              // 3. Goles de un Equipo (+4 Pts) -> Se suma si acertó local O visitante
+              // 3. Goles de un Equipo (+4 Pts)
               if (predHome === actualHome || predAway === actualAway) {
                 matchPoints += 4;
               }
 
-              // 4. Diferencia de Goles (+2 Pts) -> Se suma si coincide la diferencia
+              // 4. Diferencia de Goles (+2 Pts)
               const actualDiff = Math.abs(actualHome - actualAway);
               const predDiff = Math.abs(predHome - predAway);
               if (actualDiff === predDiff) {
@@ -282,7 +291,7 @@ export const api = {
       }),
       headers: { 'Prefer': 'return=representation' }
     });
-    
+
     return { 
       match: { 
         id: matchId, 
@@ -295,7 +304,6 @@ export const api = {
     };
   },
 
-  // Asignar resultado normal
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
       method: 'PATCH',
@@ -310,7 +318,6 @@ export const api = {
     return { success: true };
   },
 
-  // Ganado por escritorio (W.O.): Asigna marcador reglamentario (ej. 3-0) y flag is_desk_win
   adminSetDeskWinResult: async (matchId: string, homeScore: number, awayScore: number) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
       method: 'PATCH',
@@ -325,7 +332,6 @@ export const api = {
     return { success: true };
   },
 
-  // Suspender partido (queda congelado temporalmente)
   adminSuspendMatch: async (matchId: string) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
       method: 'PATCH',
@@ -337,7 +343,6 @@ export const api = {
     return { success: true };
   },
 
-  // Cancelar/Anular partido definitivamente (0 puntos para todos)
   adminCancelMatch: async (matchId: string) => {
     await sbRequest(`matches?id=eq.${matchId}`, {
       method: 'PATCH',
