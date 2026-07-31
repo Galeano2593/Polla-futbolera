@@ -113,15 +113,15 @@ export const api = {
   getMatches: async () => {
     const matches = await sbRequest<any[]>(`matches?select=*&order=kickoff.asc`);
     const mapped: Match[] = (matches || []).map((m: any) => ({
-      id: m.id,
+      id: String(m.id),
       homeTeam: m.home_team,
       awayTeam: m.away_team,
       kickoff: m.kickoff,
       status: m.status,
       isDeskWin: m.is_desk_win || false,
       createdAt: m.created_at || new Date().toISOString(),
-      homeScore: m.home_score !== null ? m.home_score : undefined,
-      awayScore: m.away_score !== null ? m.away_score : undefined
+      homeScore: (m.home_score !== null && m.home_score !== undefined) ? Number(m.home_score) : undefined,
+      awayScore: (m.away_score !== null && m.away_score !== undefined) ? Number(m.away_score) : undefined
     }));
     return { matches: mapped };
   },
@@ -143,10 +143,10 @@ export const api = {
 
     const mapped: Prediction[] = userPreds.map(p => ({
       id: p.id,
-      matchId: p.match_id,
+      matchId: String(p.match_id),
       userId: p.username,
-      homeScore: p.home_score,
-      awayScore: p.away_score,
+      homeScore: Number(p.home_score),
+      awayScore: Number(p.away_score),
       points: p.points ?? null,
       scored: p.scored ?? false,
       createdAt: p.created_at,
@@ -169,8 +169,8 @@ export const api = {
         id: predId,
         username: targetUsername,
         match_id: matchId,
-        home_score: homeScore,
-        away_score: awayScore
+        home_score: Number(homeScore),
+        away_score: Number(awayScore)
       }),
       headers: { 'Prefer': 'resolution=merge-duplicates' }
     });
@@ -216,7 +216,7 @@ export const api = {
         });
 
         userPredictions.forEach(p => {
-          const match = safeMatches.find(m => m.id === p.match_id);
+          const match = safeMatches.find(m => String(m.id) === String(p.match_id));
 
           if (!match || match.status === 'cancelled' || match.status === 'suspended') {
             return;
@@ -274,7 +274,7 @@ export const api = {
   },
 
   // ==========================================
-  // ⚙️ FUNCIONES DE ADMINISTRACIÓN
+  // ⚙️ FUNCIONES DE ADMINISTRACIÓN CORREGIDAS
   // ==========================================
 
   adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
@@ -305,12 +305,12 @@ export const api = {
   },
 
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
-    await sbRequest(`matches?id=eq.${matchId}`, {
+    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: 'finished',
-        home_score: homeScore,
-        away_score: awayScore,
+        home_score: Number(homeScore),
+        away_score: Number(awayScore),
         is_desk_win: false
       }),
       headers: { 'Prefer': 'return=representation' }
@@ -319,12 +319,12 @@ export const api = {
   },
 
   adminSetDeskWinResult: async (matchId: string, homeScore: number, awayScore: number) => {
-    await sbRequest(`matches?id=eq.${matchId}`, {
+    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: 'finished',
-        home_score: homeScore,
-        away_score: awayScore,
+        home_score: Number(homeScore),
+        away_score: Number(awayScore),
         is_desk_win: true
       }),
       headers: { 'Prefer': 'return=representation' }
@@ -333,7 +333,7 @@ export const api = {
   },
 
   adminSuspendMatch: async (matchId: string) => {
-    await sbRequest(`matches?id=eq.${matchId}`, {
+    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: 'suspended'
@@ -344,7 +344,7 @@ export const api = {
   },
 
   adminCancelMatch: async (matchId: string) => {
-    await sbRequest(`matches?id=eq.${matchId}`, {
+    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: 'cancelled',
@@ -357,7 +357,7 @@ export const api = {
   },
 
   adminUpdateMatchKickoff: async (matchId: string, newKickoff: string) => {
-    await sbRequest(`matches?id=eq.${matchId}`, {
+    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
       method: 'PATCH',
       body: JSON.stringify({
         kickoff: newKickoff
@@ -369,7 +369,7 @@ export const api = {
 
   adminDeleteUser: async (usernameToDelete: string) => {
     const cleanUser = usernameToDelete.trim().toLowerCase();
-    await sbRequest(`users?username=eq.${cleanUser}`, {
+    await sbRequest(`users?username=eq.${encodeURIComponent(cleanUser)}`, {
       method: 'DELETE'
     });
     return { success: true };
