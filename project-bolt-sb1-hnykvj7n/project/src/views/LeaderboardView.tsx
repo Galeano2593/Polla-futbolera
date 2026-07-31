@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { useAuth } from '@/context/AuthContext';
@@ -27,7 +26,7 @@ export default function LeaderboardView() {
   // Normalizar el id/username del usuario autenticado para comparaciones
   const savedUserRaw = localStorage.getItem('pf_current_user');
   const parsedUser = savedUserRaw ? JSON.parse(savedUserRaw) : null;
-  const currentUserId = String(parsedUser?.rawUsername || user?.id || user?.username || '').trim().toLowerCase();
+  const currentUserId = String(parsedUser?.rawUsername || parsedUser?.id || user?.id || user?.username || '').trim().toLowerCase();
 
   async function loadData() {
     try {
@@ -51,7 +50,7 @@ export default function LeaderboardView() {
       const rawMatches: Match[] = mRes.matches || [];
       const rawPredictions: Prediction[] = Array.isArray(pRes) ? pRes.map((p: any) => ({
         id: p.id,
-        matchId: p.match_id,
+        matchId: String(p.match_id),
         userId: String(p.username).trim().toLowerCase(),
         homeScore: p.home_score,
         awayScore: p.away_score,
@@ -79,8 +78,7 @@ export default function LeaderboardView() {
         setUsersMap(map);
       }
 
-      // 🔄 AUTO-SINCRONIZACIÓN DE USUARIOS EN SUPABASE
-      // Busca usernames presentes en predicciones que NO estén en la tabla users y los guarda
+      // AUTO-SINCRONIZACIÓN DE USUARIOS EN SUPABASE
       const predictorUserIds = Array.from(new Set(rawPredictions.map(p => p.userId)));
       const missingUsers = predictorUserIds.filter(id => id && !existingUsernamesInDb.includes(id));
 
@@ -139,14 +137,14 @@ export default function LeaderboardView() {
         let totalFinishedPlayed = 0;
 
         finishedMatches.forEach(match => {
-          const pred = userPreds.find(p => p.matchId === match.id);
-          if (pred && pred.homeScore !== undefined && pred.awayScore !== undefined) {
+          const pred = userPreds.find(p => p.matchId === String(match.id));
+          if (pred && pred.homeScore !== undefined && pred.awayScore !== undefined && pred.homeScore !== null && pred.awayScore !== null) {
             totalFinishedPlayed++;
             
             const realHome = match.homeScore ?? 0;
             const realAway = match.awayScore ?? 0;
-            const predHome = pred.homeScore;
-            const predAway = pred.awayScore;
+            const predHome = Number(pred.homeScore);
+            const predAway = Number(pred.awayScore);
 
             // 1. Marcador Exacto (+10 pts)
             const isExact = predHome === realHome && predAway === realAway;
@@ -164,7 +162,6 @@ export default function LeaderboardView() {
             const predDiff = Math.abs(predHome - predAway);
             const isDiffHit = realDiff === predDiff;
 
-            // Jerarquía estricta de evaluación
             if (isExact) {
               calculatedPoints += 10;
               successfulMatches++;
@@ -217,7 +214,7 @@ export default function LeaderboardView() {
     loadData();
   }, []);
 
-  // 🗑️ ELIMINACIÓN COMPLETA DE USUARIO Y SUS PREDICCIONES
+  // ELIMINACIÓN COMPLETA DE USUARIO Y SUS PREDICCIONES
   async function handleDeleteUser(usernameToDelete: string, displayName: string) {
     const confirmar = window.confirm(
       `¿Estás seguro de que deseas eliminar permanentemente a "${displayName}" (${usernameToDelete})?\n\nEsto borrará sus datos de la base de datos y todas sus predicciones registradas.`
@@ -228,7 +225,6 @@ export default function LeaderboardView() {
     try {
       const cleanUsername = String(usernameToDelete).trim().toLowerCase();
 
-      // 1. Borrar todas sus predicciones asociadas en Supabase
       await fetch(
         `https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/predictions?username=eq.${encodeURIComponent(cleanUsername)}`,
         {
@@ -241,7 +237,6 @@ export default function LeaderboardView() {
         }
       );
 
-      // 2. Borrar el registro del usuario de la tabla users en Supabase
       await fetch(
         `https://trumjgflgcnrfusfxgtn.supabase.co/rest/v1/users?username=eq.${encodeURIComponent(cleanUsername)}`,
         {
@@ -254,7 +249,6 @@ export default function LeaderboardView() {
         }
       );
 
-      // 3. Borrar el usuario en la API / Backend principal si aplica
       try {
         // @ts-ignore
         if (api.adminDeleteUser) {
@@ -265,7 +259,6 @@ export default function LeaderboardView() {
         console.warn('Eliminado vía Supabase, el backend retornó:', apiErr);
       }
 
-      // 4. Volver a cargar la información totalmente limpia
       await loadData();
     } catch (err) {
       console.error('Error al intentar eliminar absolutamente todo del usuario:', err);
@@ -284,6 +277,8 @@ export default function LeaderboardView() {
     return <LoadingSoccer message="Actualizando posiciones y rachas de la polla..." />;
   }
 
+  const nowTime = Date.now();
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto mb-12 text-slate-100">
       <div className="text-center sm:text-left mb-2">
@@ -301,7 +296,7 @@ export default function LeaderboardView() {
             {leaderboard.map((row, index) => {
               const positionNumber = row.rank || index + 1;
               const rowUserId = String(row.rawUsername || row.userId).trim().toLowerCase();
-              const isCurrentUser = currentUserId === rowUserId;
+              const isCurrentUserRow = currentUserId === rowUserId;
               const isExpanded = expandedUser === rowUserId;
               const isLeader = positionNumber === 1;
 
@@ -321,12 +316,12 @@ export default function LeaderboardView() {
                   {/* Fila Principal de Información */}
                   <div
                     className={`flex items-center justify-between p-4 transition-colors cursor-pointer ${
-                      isCurrentUser ? 'bg-emerald-500/10' : 'hover:bg-slate-800/30'
+                      isCurrentUserRow ? 'bg-emerald-500/10' : 'hover:bg-slate-800/30'
                     }`}
                     onClick={() => toggleExpandUser(rowUserId)}
                   >
                     <div className="flex items-center gap-3">
-                      {/* Recuadro de Posición (Achicado) */}
+                      {/* Recuadro de Posición */}
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 shadow-md ${
                         isLeader
                           ? 'bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-950 ring-2 ring-yellow-400/60 shadow-yellow-500/20' 
@@ -345,8 +340,8 @@ export default function LeaderboardView() {
 
                       <div className="flex flex-col">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-sm font-semibold ${isCurrentUser ? 'text-emerald-400' : 'text-slate-200'}`}>
-                            {displayName} {isCurrentUser && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-0.5">Tú</span>}
+                          <span className={`text-sm font-semibold ${isCurrentUserRow ? 'text-emerald-400' : 'text-slate-200'}`}>
+                            {displayName} {isCurrentUserRow && <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded-md font-normal ml-0.5">Tú</span>}
                           </span>
 
                           {/* INSIGNIA: LÍDER */}
@@ -403,21 +398,25 @@ export default function LeaderboardView() {
                   {isExpanded && (
                     <div className="bg-slate-950/50 px-4 pb-4 pt-1 border-t border-slate-900 flex flex-col gap-2 animate-fadeIn">
                       <div className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase flex items-center gap-1 mb-1">
-                        <Eye className="w-3 h-3 text-emerald-400" /> Pronósticos visibles
+                        <Eye className="w-3 h-3 text-emerald-400" /> Pronósticos
                       </div>
                       
                       {matches.map(match => {
-                        const isMatchClosed = new Date(match.kickoff) <= new Date() || match.status === 'finished';
-                        const canSeePrediction = isMatchClosed || isCurrentUser;
+                        const kickoffTime = new Date(match.kickoff).getTime();
+                        
+                        // 🔒 REGLA DE PRIVACIDAD RIGUROSA:
+                        // Solo se puede ver la predicción ajena si el partido YA arrancó O si el partido está finalizado.
+                        const hasMatchStarted = kickoffTime <= nowTime || match.status === 'finished' || match.status === 'closed';
+                        const canSeePrediction = isCurrentUserRow || hasMatchStarted;
 
-                        const pred = userPreds.find(p => p.matchId === match.id);
+                        const pred = userPreds.find(p => p.matchId === String(match.id));
 
                         if (!canSeePrediction) {
                           return (
-                            <div key={match.id} className="flex justify-between items-center text-xs bg-slate-900/20 p-2 rounded-xl border border-slate-800/40 text-slate-600 italic">
-                              <span>{match.homeTeam} vs {match.awayTeam}</span>
-                              <span className="text-[10px] bg-slate-950 px-2 py-0.5 rounded text-slate-500 font-normal flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5 text-amber-500" /> Oculto hasta el silbatazo
+                            <div key={match.id} className="flex justify-between items-center text-xs bg-slate-900/20 p-2.5 rounded-xl border border-slate-800/40 text-slate-500 italic">
+                              <span className="font-medium text-slate-400 truncate w-2/3">{match.homeTeam} vs {match.awayTeam}</span>
+                              <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-semibold flex items-center gap-1 shrink-0">
+                                <Lock className="w-2.5 h-2.5 text-amber-400" /> Oculto hasta el silbatazo
                               </span>
                             </div>
                           );
@@ -429,7 +428,9 @@ export default function LeaderboardView() {
                             
                             <div className="flex items-center gap-2 justify-center w-1/3">
                               <span className="bg-slate-950 text-emerald-400 font-bold px-2 py-0.5 rounded border border-slate-800 text-sm">
-                                {pred ? `${pred.homeScore} - ${pred.awayScore}` : 'N/A'}
+                                {pred && pred.homeScore !== undefined && pred.awayScore !== undefined && pred.homeScore !== null && pred.awayScore !== null
+                                  ? `${pred.homeScore} - ${pred.awayScore}` 
+                                  : 'N/A'}
                               </span>
                             </div>
 
