@@ -45,8 +45,8 @@ export default function AdminView() {
 
       res.matches.forEach((m) => {
         initialResults[m.id] = {
-          home: m.homeScore !== undefined ? String(m.homeScore) : '',
-          away: m.awayScore !== undefined ? String(m.awayScore) : '',
+          home: m.homeScore !== undefined && m.homeScore !== null ? String(m.homeScore) : '',
+          away: m.awayScore !== undefined && m.awayScore !== null ? String(m.awayScore) : '',
         };
         if (m.kickoff) {
           const d = new Date(m.kickoff);
@@ -63,6 +63,7 @@ export default function AdminView() {
       setEditingKickoff(initialKickoffs);
     } catch (err) {
       console.error(err);
+      setError('Error al cargar la lista de partidos');
     } finally {
       setLoading(false);
     }
@@ -91,14 +92,13 @@ export default function AdminView() {
     });
   }
 
-  // Ejecutar acción tras presionar "Sí" en el modal
+  // Ejecutar acción tras presionar "Sí, confirmar" en el modal
   async function handleConfirmAction() {
     if (!confirmModal.matchId || !confirmModal.type) return;
 
     const matchId = confirmModal.matchId;
     const actionType = confirmModal.type;
 
-    setConfirmModal({ isOpen: false, type: null, matchId: null, matchName: '' });
     setBusy(true);
     setError('');
     setSuccess('');
@@ -106,15 +106,41 @@ export default function AdminView() {
     try {
       if (actionType === 'close') {
         const res = results[matchId];
-        await api.adminSetResult(matchId, parseInt(res.home, 10), parseInt(res.away, 10));
-        setSuccess('¡Marcador guardado con éxito!');
+        
+        if (!res || res.home === '' || res.away === '') {
+          throw new Error('Debes ingresar un marcador válido.');
+        }
+
+        const homeNum = parseInt(res.home, 10);
+        const awayNum = parseInt(res.away, 10);
+
+        if (isNaN(homeNum) || isNaN(awayNum)) {
+          throw new Error('Los marcadores deben ser números enteros válidos.');
+        }
+
+        // 1. Guardar resultado en Supabase
+        await api.adminSetResult(matchId, homeNum, awayNum);
+
+        // 2. Recalcular tabla global si la API dispone del helper
+        if (typeof (api as any).recalculateLeaderboard === 'function') {
+          await (api as any).recalculateLeaderboard();
+        }
+
+        setSuccess('¡Marcador guardado y puntos recalculados con éxito!');
       } else if (actionType === 'cancel') {
         await api.adminCancelMatch(matchId);
         setSuccess('¡Partido anulado correctamente!');
       }
+
+      // Cerrar modal solo en éxito
+      setConfirmModal({ isOpen: false, type: null, matchId: null, matchName: '' });
+
+      // Refrescar partidos desde Supabase
       await loadMatches();
     } catch (err) {
+      console.error('Error procesando partido:', err);
       setError(err instanceof Error ? err.message : 'Ocurrió un error al procesar la solicitud');
+      setConfirmModal({ isOpen: false, type: null, matchId: null, matchName: '' });
     } finally {
       setBusy(false);
     }
@@ -189,6 +215,10 @@ export default function AdminView() {
   const scheduledMatches = matches.filter((m) => m.status !== 'finished' && m.status !== 'cancelled');
   const finishedMatches = matches.filter((m) => m.status === 'finished');
 
+  if (loading) {
+    return <LoadingSoccer message="Cargando panel de administración..." />;
+  }
+
   return (
     <div className="space-y-8 max-w-2xl mx-auto mb-12 text-slate-200 relative">
       <div>
@@ -198,12 +228,12 @@ export default function AdminView() {
 
       {error && (
         <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4" /> <span>{error}</span>
+          <AlertCircle className="w-4 h-4 flex-shrink-0" /> <span>{error}</span>
         </div>
       )}
       {success && (
         <div className="text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
-          <Check className="w-4 h-4" /> <span>{success}</span>
+          <Check className="w-4 h-4 flex-shrink-0" /> <span>{success}</span>
         </div>
       )}
 
@@ -257,7 +287,7 @@ export default function AdminView() {
           <button
             type="button"
             onClick={loadMatches}
-            className="p-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-400 hover:text-white"
+            className="p-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-400 hover:text-white transition"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -473,7 +503,7 @@ export default function AdminView() {
         </div>
       )}
 
-      {busy && <LoadingSoccer message="Procesando..." />}
+      {busy && <LoadingSoccer message="Procesando solicitud..." />}
     </div>
   );
 }
