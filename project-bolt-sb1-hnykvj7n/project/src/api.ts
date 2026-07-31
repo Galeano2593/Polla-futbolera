@@ -82,7 +82,7 @@ export const api = {
         headers: { 'Prefer': 'resolution=merge-duplicates' }
       }).catch(() => {});
 
-      const adminUser: AuthUser = { id: 'admin', username: 'Administrador', isAdmin: true };
+      const adminUser: AuthUser = { id: 'admin', username: 'admin', isAdmin: true };
       localStorage.setItem('pf_token', 'sb-token-admin');
       localStorage.setItem('pf_current_user', JSON.stringify({ ...adminUser, rawUsername: 'admin' }));
       return { token: 'sb-token-admin', user: adminUser };
