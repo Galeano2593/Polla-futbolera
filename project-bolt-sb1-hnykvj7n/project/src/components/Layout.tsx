@@ -12,6 +12,17 @@ export default function Layout() {
     navigate('/');
   }
 
+  // ✅ Evaluamos si es administrador cubriendo todas las estructuras posibles de user
+  const isAdmin = 
+    user?.role === 'admin' || 
+    user?.isAdmin === true || 
+    user?.username?.toLowerCase() === 'admin';
+
+  // ✅ Forzamos que la etiqueta muestre 'Admin' en lugar de 'Administrador' o 'admin'
+  const displayName = isAdmin 
+    ? 'Admin' 
+    : (user?.full_name || user?.username || 'Usuario');
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30">
       {/* Encabezado Principal */}
@@ -27,10 +38,10 @@ export default function Layout() {
             />
           </Link>
 
-          {/* Bloque de Usuario y Salir perfectamente Centrados */}
+          {/* Bloque de Usuario y Salir */}
           <div className="flex items-center gap-3 sm:gap-4 my-auto">
             <span className="text-xs font-medium bg-slate-800 text-slate-300 px-3 py-1.5 rounded-full border border-slate-700/50 flex items-center gap-1.5">
-              ⚽ {user?.username}
+              ⚽ {displayName}
             </span>
             <button
               onClick={handleLogout}
@@ -107,8 +118,8 @@ export default function Layout() {
             <span>Reglas</span>
           </Link>
 
-          {/* Acceso rápido para el Administrador de la Liga BetPlay */}
-          {user?.role === 'admin' && (
+          {/* Acceso rápido para el Administrador */}
+          {isAdmin && (
             <Link
               to="/admin"
               className={`flex flex-col items-center gap-1 text-xs font-medium transition-all ${
