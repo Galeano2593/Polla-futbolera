@@ -76,7 +76,7 @@ export const api = {
         body: JSON.stringify({
           username: 'admin',
           password: 'admin123',
-          full_name: 'Administrador',
+          full_name: 'admin',
           role: 'admin'
         }),
         headers: { 'Prefer': 'resolution=merge-duplicates' }
