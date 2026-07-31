@@ -21,34 +21,74 @@ export default function HistoryView() {
         setPredictions(pRes.predictions);
       } catch (err) {
         console.error(err);
-      } finally {
+      } font-medium {
         setLoading(false);
       }
     }
     loadHistoryData();
   }, []);
 
-  // Función para calcular los puntos exactos ganados en un partido
+  // Función para calcular los puntos exactos segun las reglas de la polla
   function calculatePoints(predHome?: number, predAway?: number, realHome?: number, realAway?: number) {
     if (predHome === undefined || predAway === undefined || realHome === undefined || realAway === undefined) {
-      return { pts: 0, type: 'none', label: 'Sin pronóstico' };
+      return { 
+        pts: 0, 
+        type: 'none', 
+        label: 'Sin pronóstico',
+        badgeStyle: 'bg-slate-800 text-slate-400 border-slate-700/50'
+      };
     }
 
-    // 🎯 Marcador Exacto (10 puntos)
+    // 🎯 1. Marcador Exacto (+10 pts)
     if (predHome === realHome && predAway === realAway) {
-      return { pts: 10, type: 'exact', label: '+10 Puntos (Exacto)' };
+      return { 
+        pts: 10, 
+        type: 'exact', 
+        label: '+10 Puntos (Marcador Exacto)',
+        badgeStyle: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+      };
     }
 
-    // ⚽ Ganador o Empate correcto (3 puntos)
+    // 🏆 2. Ganador o Empate (+7 pts)
     const realResult = Math.sign(realHome - realAway);
     const predResult = Math.sign(predHome - predAway);
 
     if (realResult === predResult) {
-      return { pts: 3, type: 'winner', label: '+3 Puntos (Acierto)' };
+      return { 
+        pts: 7, 
+        type: 'winner', 
+        label: '+7 Puntos (Acierto Ganador/Empate)',
+        badgeStyle: 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+      };
     }
 
-    // ❌ No acertó (0 puntos)
-    return { pts: 0, type: 'miss', label: '0 Puntos' };
+    // ⚽ 3. Goles de un equipo (+4 pts)
+    if (predHome === realHome || predAway === realAway) {
+      return { 
+        pts: 4, 
+        type: 'goals', 
+        label: '+4 Puntos (Goles de un equipo)',
+        badgeStyle: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+      };
+    }
+
+    // 📐 4. Diferencia de Goles (+2 pts)
+    if (Math.abs(predHome - predAway) === Math.abs(realHome - realAway)) {
+      return { 
+        pts: 2, 
+        type: 'diff', 
+        label: '+2 Puntos (Diferencia de goles)',
+        badgeStyle: 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+      };
+    }
+
+    // ❌ Sin acierto (0 pts)
+    return { 
+      pts: 0, 
+      type: 'miss', 
+      label: '0 Puntos',
+      badgeStyle: 'bg-slate-800 text-slate-400 border-slate-700/50'
+    };
   }
 
   if (loading) {
@@ -90,19 +130,13 @@ export default function HistoryView() {
                       weekday: 'short',
                       day: 'numeric',
                       month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
                     })}
                   </div>
 
-                  {/* Badge de Puntos Obtenidos */}
-                  <div
-                    className={`px-2.5 py-1 rounded-full font-bold text-[11px] flex items-center gap-1 border ${
-                      result.type === 'exact'
-                        ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
-                        : result.type === 'winner'
-                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                        : 'bg-slate-800 text-slate-400 border-slate-700/50'
-                    }`}
-                  >
+                  {/* Badge de Puntos Obtenidos (dinámico con colores correspondientes) */}
+                  <div className={`px-2.5 py-1 rounded-full font-bold text-[11px] flex items-center gap-1 border ${result.badgeStyle}`}>
                     <Award className="w-3 h-3" />
                     <span>{result.label}</span>
                   </div>
