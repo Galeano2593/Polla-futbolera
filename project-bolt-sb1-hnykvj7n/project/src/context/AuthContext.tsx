@@ -32,19 +32,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function login(usernameInput: string, passwordInput: string) {
-    // Llamar al endpoint real en api.ts que maneja Supabase y la lógica admin
     const response = await api.login(usernameInput, passwordInput);
 
+    // ✅ Normalizamos el objeto de usuario antes de guardar
+    const userData = {
+      ...response.user,
+      role: response.user.role || (response.user.username?.toLowerCase() === 'admin' ? 'admin' : 'user'),
+      isAdmin: response.user.role === 'admin' || response.user.username?.toLowerCase() === 'admin'
+    };
+
+    // ✅ Guardamos en localStorage para que persista al recargar
+    localStorage.setItem('pf_token', response.token);
+    localStorage.setItem('pf_current_user', JSON.stringify(userData));
+
     setToken(response.token);
-    setUser(response.user);
+    setUser(userData);
   }
 
   async function register(usernameInput: string, passwordInput: string, fullNameInput?: string) {
-    // Llamar al registro real de Supabase
     const response = await api.register(usernameInput, passwordInput, fullNameInput || usernameInput);
 
+    const userData = {
+      ...response.user,
+      role: response.user.role || 'user',
+      isAdmin: response.user.role === 'admin'
+    };
+
+    // ✅ Guardamos en localStorage para que persista al recargar
+    localStorage.setItem('pf_token', response.token);
+    localStorage.setItem('pf_current_user', JSON.stringify(userData));
+
     setToken(response.token);
-    setUser(response.user);
+    setUser(userData);
   }
 
   function logout() {
