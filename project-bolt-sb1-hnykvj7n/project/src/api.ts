@@ -316,37 +316,43 @@ export const api = {
 
   
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
-    const rawId = matchId.toString().replace(/^m/, '').trim();
-    
-    const payload = {
-      status: 'finished',
-      home_score: Number(homeScore),
-      away_score: Number(awayScore),
-      is_desk_win: false
-    };
+    // Convertimos los marcadores a números explícitos
+    const hScore = Number(homeScore);
+    const aScore = Number(awayScore);
 
-    console.log('Intentando actualizar partido:', { matchId, rawId, payload });
-
-    // Intento 1: Actualización con ID como número/limpio
-    const res1 = await sbRequest<any[]>(`matches?id=eq.${encodeURIComponent(rawId)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-      headers: { 'Prefer': 'return=representation' }
-    }).catch(() => []);
-
-    if (Array.isArray(res1) && res1.length > 0) {
-      console.log('¡Guardado exitoso con ID limpio!', res1);
-      return { success: true };
+    // Intentaremos actualizar probando primero el id tal cual viene y luego sin el prefijo "m" si aplica
+    const targetIds = [matchId];
+    if (matchId.startsWith('m')) {
+      targetIds.push(matchId.substring(1));
     }
 
-    // Intento 2: Actualización con ID original con prefijo si el anterior no afectó filas
-    const res2 = await sbRequest<any[]>(`matches?id=eq.${encodeURIComponent(matchId)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-      headers: { 'Prefer': 'return=representation' }
-    }).catch(() => []);
+    let updated = false;
 
-    console.log('Resultado del intento con ID original:', res2);
+    for (const idToTry of targetIds) {
+      try {
+        // Enviar solo los campos esenciales
+        await sbRequest(`matches?id=eq.${encodeURIComponent(idToTry)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'finished',
+            home_score: hScore,
+            away_score: aScore
+          }),
+          headers: { 
+            'Prefer': 'return=representation' 
+          }
+        });
+        updated = true;
+        break;
+      } catch (e) {
+        console.warn(`Intento fallido con id=${idToTry}:`, e);
+      }
+    }
+
+    if (!updated) {
+      throw new Error('No se pudo actualizar el resultado del partido en Supabase. Verifica el tipo de ID o estructura de la tabla.');
+    }
+
     return { success: true };
   },
 
