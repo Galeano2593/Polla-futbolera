@@ -21,7 +21,15 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 function AdminRoute({ children }: { children: ReactNode }) {
   const { user, token } = useAuth();
   if (!token) return <Navigate to="/" replace />;
-  if (user?.role !== 'admin') return <Navigate to="/predictions" replace />;
+  
+  // ✅ Acepta si es role 'admin', si isAdmin es true, o si el username es 'admin'
+  const isUserAdmin = 
+    user?.role === 'admin' || 
+    user?.isAdmin === true || 
+    user?.username?.toLowerCase() === 'admin';
+
+  if (!isUserAdmin) return <Navigate to="/predictions" replace />;
+  
   return <>{children}</>;
 }
 
