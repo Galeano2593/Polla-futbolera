@@ -214,28 +214,38 @@ export const api = {
 
           // Si el partido finalizó (o se ganó por escritorio con marcador asignado)
           if (match.status === 'finished' && match.home_score !== null && match.away_score !== null) {
-            const actualHome = match.home_score;
-            const actualAway = match.away_score;
-            const predHome = p.home_score;
-            const predAway = p.away_score;
+            const actualHome = Number(match.home_score);
+            const actualAway = Number(match.away_score);
+            const predHome = Number(p.home_score);
+            const predAway = Number(p.away_score);
 
-            let matchPoints = 0;
+            // 1. Marcador Exacto (+10 Pts) -> Premio máximo exclusivo
             if (predHome === actualHome && predAway === actualAway) {
-              matchPoints = 10;
+              points += 10;
             } else {
-              const actualWinner = actualHome > actualAway ? 'home' : actualHome < actualAway ? 'away' : 'draw';
-              const predWinner = predHome > predAway ? 'home' : predHome < predAway ? 'away' : 'draw';
-              if (actualWinner === predWinner) matchPoints = 7;
-              if (predHome === actualHome || predAway === actualAway) {
-                if (matchPoints < 4) matchPoints = 4;
+              let matchPoints = 0;
+
+              // 2. Acertar Ganador o Empate (+7 Pts)
+              const actualWinner = Math.sign(actualHome - actualAway);
+              const predWinner = Math.sign(predHome - predAway);
+              if (actualWinner === predWinner) {
+                matchPoints += 7;
               }
+
+              // 3. Goles de un Equipo (+4 Pts) -> Se suma si acertó local O visitante
+              if (predHome === actualHome || predAway === actualAway) {
+                matchPoints += 4;
+              }
+
+              // 4. Diferencia de Goles (+2 Pts) -> Se suma si coincide la diferencia
               const actualDiff = Math.abs(actualHome - actualAway);
               const predDiff = Math.abs(predHome - predAway);
               if (actualDiff === predDiff) {
-                if (matchPoints < 2) matchPoints = 2;
+                matchPoints += 2;
               }
+
+              points += matchPoints;
             }
-            points += matchPoints;
           }
         });
 
