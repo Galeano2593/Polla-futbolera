@@ -21,7 +21,7 @@ export default function HistoryView() {
         setPredictions(pRes.predictions);
       } catch (err) {
         console.error(err);
-      } font-medium {
+      } finally {
         setLoading(false);
       }
     }
