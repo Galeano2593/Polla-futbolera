@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { AuthUser } from '@/types';
+import { api } from '@/api'; // Importamos el servicio de la API de Supabase
 
 interface AuthContextType {
   user: AuthUser | null;
   token: string | null;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string, fullName?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -19,7 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  // Mantener sincronizados los estados globales ante cambios externos
+  // Mantener sincronizados los estados globales ante cambios en otras pestañas
   useEffect(() => {
     const handleStorageChange = () => {
       setToken(localStorage.getItem('pf_token'));
@@ -31,61 +32,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function login(usernameInput: string, passwordInput: string) {
-    const cleanUsername = usernameInput.trim().toLowerCase();
-    const usersData = localStorage.getItem('pf_users');
-    const users = usersData ? JSON.parse(usersData) : {};
+    // Llamar al endpoint real en api.ts que maneja Supabase y la lógica admin
+    const response = await api.login(usernameInput, passwordInput);
 
-    // 🔒 ACCESO MAESTRO FORZADO: Administrador
-    if (cleanUsername === 'admin') {
-      if (passwordInput !== 'admin123') {
-        throw new Error('Contraseña de administrador incorrecta');
-      }
-      users['admin'] = passwordInput;
-      localStorage.setItem('pf_users', JSON.stringify(users));
-    } else {
-      // Validación normal de usuarios
-      if (!users[cleanUsername] || users[cleanUsername] !== passwordInput) {
-        throw new Error('Usuario o contraseña incorrectos');
-      }
-    }
-
-    const mockToken = `mock-token-${cleanUsername}`;
-    const loggedUser: AuthUser = {
-      id: cleanUsername,
-      username: cleanUsername,
-      role: cleanUsername === 'admin' ? 'admin' : 'user',
-    };
-
-    localStorage.setItem('pf_token', mockToken);
-    localStorage.setItem('pf_current_user', JSON.stringify(loggedUser));
-
-    setToken(mockToken);
-    setUser(loggedUser);
+    setToken(response.token);
+    setUser(response.user);
   }
 
-  async function register(usernameInput: string, passwordInput: string) {
-    const cleanUsername = usernameInput.trim().toLowerCase();
-    const usersData = localStorage.getItem('pf_users');
-    const users = usersData ? JSON.parse(usersData) : {};
+  async function register(usernameInput: string, passwordInput: string, fullNameInput?: string) {
+    // Llamar al registro real de Supabase
+    const response = await api.register(usernameInput, passwordInput, fullNameInput || usernameInput);
 
-    if (users[cleanUsername] || cleanUsername === 'admin') {
-      throw new Error('El usuario ya existe');
-    }
-
-    users[cleanUsername] = passwordInput;
-    const mockToken = `mock-token-${cleanUsername}`;
-    const loggedUser: AuthUser = {
-      id: cleanUsername,
-      username: cleanUsername,
-      role: cleanUsername === 'admin' ? 'admin' : 'user',
-    };
-
-    localStorage.setItem('pf_users', JSON.stringify(users));
-    localStorage.setItem('pf_token', mockToken);
-    localStorage.setItem('pf_current_user', JSON.stringify(loggedUser));
-
-    setToken(mockToken);
-    setUser(loggedUser);
+    setToken(response.token);
+    setUser(response.user);
   }
 
   function logout() {
