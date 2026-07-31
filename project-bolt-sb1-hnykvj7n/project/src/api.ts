@@ -317,32 +317,60 @@ export const api = {
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
     const cleanId = cleanMatchId(matchId);
     
-    // Intentamos actualizar tanto por matchId procesado como directo
-    await sbRequest(`matches?or=(id.eq.${encodeURIComponent(cleanId)},id.eq.${encodeURIComponent(matchId)})`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status: 'finished',
-        home_score: Number(homeScore),
-        away_score: Number(awayScore),
-        is_desk_win: false
-      }),
-      headers: { 'Prefer': 'return=representation' }
-    });
+    // 1. Intentamos actualizar por el ID limpio (numérico/directo)
+    try {
+      await sbRequest(`matches?id=eq.${encodeURIComponent(cleanId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'finished',
+          home_score: Number(homeScore),
+          away_score: Number(awayScore),
+          is_desk_win: false
+        }),
+        headers: { 'Prefer': 'return=representation' }
+      });
+    } catch (err) {
+      // 2. Si falla o no hace match, intentamos con el ID original con 'm'
+      await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'finished',
+          home_score: Number(homeScore),
+          away_score: Number(awayScore),
+          is_desk_win: false
+        }),
+        headers: { 'Prefer': 'return=representation' }
+      });
+    }
+    
     return { success: true };
   },
 
-  adminSetDeskWinResult: async (matchId: string, homeScore: number, awayScore: number) => {
+ adminSetDeskWinResult: async (matchId: string, homeScore: number, awayScore: number) => {
     const cleanId = cleanMatchId(matchId);
-    await sbRequest(`matches?or=(id.eq.${encodeURIComponent(cleanId)},id.eq.${encodeURIComponent(matchId)})`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status: 'finished',
-        home_score: Number(homeScore),
-        away_score: Number(awayScore),
-        is_desk_win: true
-      }),
-      headers: { 'Prefer': 'return=representation' }
-    });
+    try {
+      await sbRequest(`matches?id=eq.${encodeURIComponent(cleanId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'finished',
+          home_score: Number(homeScore),
+          away_score: Number(awayScore),
+          is_desk_win: true
+        }),
+        headers: { 'Prefer': 'return=representation' }
+      });
+    } catch (err) {
+      await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'finished',
+          home_score: Number(homeScore),
+          away_score: Number(awayScore),
+          is_desk_win: true
+        }),
+        headers: { 'Prefer': 'return=representation' }
+      });
+    }
     return { success: true };
   },
 
