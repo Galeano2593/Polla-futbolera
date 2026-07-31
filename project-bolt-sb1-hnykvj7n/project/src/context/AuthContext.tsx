@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { AuthUser } from '@/types';
+import { supabase } from '@/lib/supabase'; // Asegúrate de ajustar esta ruta según tu proyecto
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -12,14 +13,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Inicializar estados directamente leyendo de localStorage
+  // Inicializar estados leyendo de localStorage
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('pf_token'));
   const [user, setUser] = useState<AuthUser | null>(() => {
     const savedUser = localStorage.getItem('pf_current_user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  // Mantener sincronizados los estados globales ante cambios externos
+  // Sincronización entre pestañas
   useEffect(() => {
     const handleStorageChange = () => {
       setToken(localStorage.getItem('pf_token'));
@@ -30,56 +31,103 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  async function login(username: string, password: string) {
-    const usersData = localStorage.getItem('pf_users');
-    const users = usersData ? JSON.parse(usersData) : {};
+  async function login(usernameInput: string, passwordInput: string) {
+    const cleanInput = usernameInput.trim();
 
-    // 🔒 ACCESO MAESTRO FORZADO: Siempre garantizará el ingreso del administrador
-    if (username === 'admin') {
-      if (password !== 'admin123') { // <-- Aquí puedes cambiar 'admin123' por tu contraseña secreta
+    // 🔒 Acceso maestro forzado para el Administrador
+    if (cleanInput === 'admin') {
+      if (passwordInput !== 'admin123') {
         throw new Error('Contraseña de administrador incorrecta');
       }
-      users['admin'] = password;
-      localStorage.setItem('pf_users', JSON.stringify(users));
-    } else {
-      // Validación normal para usuarios registrados normales
-      if (!users[username] || users[username] !== password) {
-        throw new Error('Usuario o contraseña incorrectos');
-      }
+
+      const adminUser: AuthUser = {
+        id: 'admin',
+        username: 'admin',
+        role: 'admin',
+      };
+
+      const mockToken = `mock-token-admin`;
+      localStorage.setItem('pf_token', mockToken);
+      localStorage.setItem('pf_current_user', JSON.stringify(adminUser));
+      setToken(mockToken);
+      setUser(adminUser);
+      return;
     }
 
-    const mockToken = `mock-token-${username}`;
+    // 🔍 Buscar en Supabase: coincide por 'username' O por 'full_name'
+    const { data: dbUser, error } = await supabase
+      .from('users')
+      .select('*')
+      .or(`username.ilike.${cleanInput},full_name.ilike.${cleanInput}`)
+      .single();
+
+    if (error || !dbUser) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    // Validación básica de contraseña (si manejas la contraseña en la columna 'password' de Supabase)
+    if (dbUser.password && dbUser.password !== passwordInput) {
+      throw new Error('Contraseña incorrecta');
+    }
+
+    // 🎯 CLAVE DEL CAMBIO: Siempre forzamos dbUser.username como la clave única
     const loggedUser: AuthUser = {
-      id: username,
-      username,
-      role: username === 'admin' ? 'admin' : 'user',
+      id: dbUser.username,
+      username: dbUser.username, // Ej: 'zephyron'
+      role: dbUser.role || 'user',
     };
 
-    // Actualizar localStorage e inmediatamente los estados de React
+    const mockToken = `token-${dbUser.username}`;
+
     localStorage.setItem('pf_token', mockToken);
     localStorage.setItem('pf_current_user', JSON.stringify(loggedUser));
-    
+
     setToken(mockToken);
     setUser(loggedUser);
   }
 
-  async function register(username: string, password: string) {
-    const usersData = localStorage.getItem('pf_users');
-    const users = usersData ? JSON.parse(usersData) : {};
+  async function register(usernameInput: string, passwordInput: string) {
+    const cleanUsername = usernameInput.trim().toLowerCase();
 
-    if (users[username] || username === 'admin') {
+    if (cleanUsername === 'admin') {
+      throw new Error('El nombre de usuario reservado no está disponible');
+    }
+
+    // Verificamos si ya existe en Supabase
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('username')
+      .eq('username', cleanUsername)
+      .single();
+
+    if (existingUser) {
       throw new Error('El usuario ya existe');
     }
 
-    users[username] = password;
-    const mockToken = `mock-token-${username}`;
+    // Insertar el nuevo usuario en Supabase
+    const { error: insertError } = await supabase
+      .from('users')
+      .insert([
+        {
+          username: cleanUsername,
+          full_name: usernameInput.trim(),
+          password: passwordInput,
+          role: 'user',
+        },
+      ]);
+
+    if (insertError) {
+      throw new Error('Error al registrar el usuario en la base de datos');
+    }
+
     const loggedUser: AuthUser = {
-      id: username,
-      username,
-      role: username === 'admin' ? 'admin' : 'user',
+      id: cleanUsername,
+      username: cleanUsername,
+      role: 'user',
     };
 
-    localStorage.setItem('pf_users', JSON.stringify(users));
+    const mockToken = `token-${cleanUsername}`;
+
     localStorage.setItem('pf_token', mockToken);
     localStorage.setItem('pf_current_user', JSON.stringify(loggedUser));
 
@@ -108,4 +156,3 @@ export function useAuth() {
   }
   return context;
 }
-
