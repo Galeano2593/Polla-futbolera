@@ -45,8 +45,8 @@ export default function AdminView() {
 
       res.matches.forEach((m) => {
         initialResults[m.id] = {
-          home: m.homeScore !== undefined && m.homeScore !== null ? String(m.homeScore) : '',
-          away: m.awayScore !== undefined && m.awayScore !== null ? String(m.awayScore) : '',
+          home: m.homeScore !== undefined && m.homeScore !== null ? String(m.homeScore) : '0',
+          away: m.awayScore !== undefined && m.awayScore !== null ? String(m.awayScore) : '0',
         };
         if (m.kickoff) {
           const d = new Date(m.kickoff);
@@ -77,7 +77,10 @@ export default function AdminView() {
   function requestConfirmation(type: 'close' | 'cancel', match: Match) {
     if (type === 'close') {
       const res = results[match.id];
-      if (!res || res.home === '' || res.away === '') {
+      const homeVal = res?.home ?? '0';
+      const awayVal = res?.away ?? '0';
+
+      if (homeVal.trim() === '' || awayVal.trim() === '') {
         setError('Debes ingresar un marcador válido antes de cerrar o corregir.');
         return;
       }
@@ -106,13 +109,11 @@ export default function AdminView() {
     try {
       if (actionType === 'close') {
         const res = results[matchId];
-        
-        if (!res || res.home === '' || res.away === '') {
-          throw new Error('Debes ingresar un marcador válido.');
-        }
+        const homeVal = res?.home ?? '0';
+        const awayVal = res?.away ?? '0';
 
-        const homeNum = parseInt(res.home, 10);
-        const awayNum = parseInt(res.away, 10);
+        const homeNum = parseInt(homeVal, 10);
+        const awayNum = parseInt(awayVal, 10);
 
         if (isNaN(homeNum) || isNaN(awayNum)) {
           throw new Error('Los marcadores deben ser números enteros válidos.');
@@ -331,7 +332,7 @@ export default function AdminView() {
                   <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
                     <input
                       type="text"
-                      value={results[match.id]?.home ?? ''}
+                      value={results[match.id]?.home ?? '0'}
                       onChange={(e) => {
                         if (e.target.value === '' || /^\d+$/.test(e.target.value))
                           setResults((p) => ({
@@ -345,7 +346,7 @@ export default function AdminView() {
                     <span className="text-slate-600 font-bold">:</span>
                     <input
                       type="text"
-                      value={results[match.id]?.away ?? ''}
+                      value={results[match.id]?.away ?? '0'}
                       onChange={(e) => {
                         if (e.target.value === '' || /^\d+$/.test(e.target.value))
                           setResults((p) => ({
@@ -401,7 +402,7 @@ export default function AdminView() {
                 <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
                   <input
                     type="text"
-                    value={results[match.id]?.home ?? ''}
+                    value={results[match.id]?.home ?? '0'}
                     onChange={(e) => {
                       if (e.target.value === '' || /^\d+$/.test(e.target.value))
                         setResults((p) => ({
@@ -414,7 +415,7 @@ export default function AdminView() {
                   <span className="text-slate-600 font-bold">:</span>
                   <input
                     type="text"
-                    value={results[match.id]?.away ?? ''}
+                    value={results[match.id]?.away ?? '0'}
                     onChange={(e) => {
                       if (e.target.value === '' || /^\d+$/.test(e.target.value))
                         setResults((p) => ({
