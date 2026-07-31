@@ -57,7 +57,7 @@ export default function HistoryView() {
       return { 
         pts: 7, 
         type: 'winner', 
-        label: '+7 Puntos (Acierto Ganador/Empate)',
+        label: '+7 Puntos (Ganador/Empate)',
         badgeStyle: 'bg-blue-500/10 text-blue-400 border-blue-500/30'
       };
     }
@@ -67,7 +67,7 @@ export default function HistoryView() {
       return { 
         pts: 4, 
         type: 'goals', 
-        label: '+4 Puntos (Goles de un equipo)',
+        label: '+4 Puntos (Goles equipo)',
         badgeStyle: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
       };
     }
