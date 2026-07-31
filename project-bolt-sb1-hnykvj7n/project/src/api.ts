@@ -6,6 +6,18 @@ import type { AuthUser, Match, Prediction, LeaderboardRow } from '@/types';
 const SUPABASE_URL = 'https://trumjgflgcnrfusfxgtn.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_oxOkx_GxNVWo4lTsdzKTbg_Ou7uiWDI';
 
+// Helper para limpiar IDs de partidos si vienen con prefijo "m"
+function cleanMatchId(id: string | number): string {
+  const strId = String(id).trim();
+  if (strId.startsWith('m')) {
+    const rawNum = strId.substring(1);
+    if (!isNaN(Number(rawNum)) && rawNum.length > 0) {
+      return rawNum;
+    }
+  }
+  return strId;
+}
+
 async function sbRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${SUPABASE_URL}/rest/v1/${path}`;
   const res = await fetch(url, {
@@ -88,7 +100,6 @@ export const api = {
       return { token: 'sb-token-admin', user: adminUser };
     }
 
-    // Búsqueda flexible e insensible a mayúsculas
     const res = await sbRequest<any[]>(`users?username=ilike.${encodeURIComponent(cleanUsername)}&select=*`);
 
     if (!res || res.length === 0) {
@@ -133,7 +144,6 @@ export const api = {
 
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
 
-    // Trae las predicciones coincidiendo por el usuario actual
     const predictions = await sbRequest<any[]>(`predictions?select=*`);
     const userPreds = (predictions || []).filter(p => {
       if (!p || !p.username) return false;
@@ -161,14 +171,15 @@ export const api = {
     const currentUser = JSON.parse(savedUser);
 
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
+    const cleanId = cleanMatchId(matchId);
 
-    const predId = `${targetUsername}-${matchId}`;
+    const predId = `${targetUsername}-${cleanId}`;
     await sbRequest(`predictions`, {
       method: 'POST',
       body: JSON.stringify({
         id: predId,
         username: targetUsername,
-        match_id: matchId,
+        match_id: cleanId,
         home_score: Number(homeScore),
         away_score: Number(awayScore)
       }),
@@ -178,7 +189,7 @@ export const api = {
     return { 
       prediction: { 
         id: predId, 
-        matchId, 
+        matchId: cleanId, 
         userId: targetUsername, 
         homeScore, 
         awayScore, 
@@ -208,7 +219,6 @@ export const api = {
         const normalizedUsername = String(u.username).trim().toLowerCase();
         const normalizedFullName = u.full_name ? String(u.full_name).trim().toLowerCase() : '';
 
-        // Búsqueda cruzada por username O full_name para evitar descalces de ID
         const userPredictions = safePredictions.filter(p => {
           if (!p || !p.username) return false;
           const predUser = String(p.username).trim().toLowerCase();
@@ -305,7 +315,10 @@ export const api = {
   },
 
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
-    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
+    const cleanId = cleanMatchId(matchId);
+    
+    // Intentamos actualizar tanto por matchId procesado como directo
+    await sbRequest(`matches?or=(id.eq.${encodeURIComponent(cleanId)},id.eq.${encodeURIComponent(matchId)})`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: 'finished',
@@ -319,7 +332,8 @@ export const api = {
   },
 
   adminSetDeskWinResult: async (matchId: string, homeScore: number, awayScore: number) => {
-    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
+    const cleanId = cleanMatchId(matchId);
+    await sbRequest(`matches?or=(id.eq.${encodeURIComponent(cleanId)},id.eq.${encodeURIComponent(matchId)})`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: 'finished',
@@ -333,7 +347,8 @@ export const api = {
   },
 
   adminSuspendMatch: async (matchId: string) => {
-    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
+    const cleanId = cleanMatchId(matchId);
+    await sbRequest(`matches?or=(id.eq.${encodeURIComponent(cleanId)},id.eq.${encodeURIComponent(matchId)})`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: 'suspended'
@@ -344,7 +359,8 @@ export const api = {
   },
 
   adminCancelMatch: async (matchId: string) => {
-    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
+    const cleanId = cleanMatchId(matchId);
+    await sbRequest(`matches?or=(id.eq.${encodeURIComponent(cleanId)},id.eq.${encodeURIComponent(matchId)})`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: 'cancelled',
@@ -357,7 +373,8 @@ export const api = {
   },
 
   adminUpdateMatchKickoff: async (matchId: string, newKickoff: string) => {
-    await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
+    const cleanId = cleanMatchId(matchId);
+    await sbRequest(`matches?or=(id.eq.${encodeURIComponent(cleanId)},id.eq.${encodeURIComponent(matchId)})`, {
       method: 'PATCH',
       body: JSON.stringify({
         kickoff: newKickoff
