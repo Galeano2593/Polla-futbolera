@@ -314,35 +314,39 @@ export const api = {
     };
   },
 
+  
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
-    const cleanId = cleanMatchId(matchId);
+    const rawId = matchId.toString().replace(/^m/, '').trim();
     
-    // 1. Intentamos actualizar por el ID limpio (numérico/directo)
-    try {
-      await sbRequest(`matches?id=eq.${encodeURIComponent(cleanId)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          status: 'finished',
-          home_score: Number(homeScore),
-          away_score: Number(awayScore),
-          is_desk_win: false
-        }),
-        headers: { 'Prefer': 'return=representation' }
-      });
-    } catch (err) {
-      // 2. Si falla o no hace match, intentamos con el ID original con 'm'
-      await sbRequest(`matches?id=eq.${encodeURIComponent(matchId)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          status: 'finished',
-          home_score: Number(homeScore),
-          away_score: Number(awayScore),
-          is_desk_win: false
-        }),
-        headers: { 'Prefer': 'return=representation' }
-      });
+    const payload = {
+      status: 'finished',
+      home_score: Number(homeScore),
+      away_score: Number(awayScore),
+      is_desk_win: false
+    };
+
+    console.log('Intentando actualizar partido:', { matchId, rawId, payload });
+
+    // Intento 1: Actualización con ID como número/limpio
+    const res1 = await sbRequest<any[]>(`matches?id=eq.${encodeURIComponent(rawId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      headers: { 'Prefer': 'return=representation' }
+    }).catch(() => []);
+
+    if (Array.isArray(res1) && res1.length > 0) {
+      console.log('¡Guardado exitoso con ID limpio!', res1);
+      return { success: true };
     }
-    
+
+    // Intento 2: Actualización con ID original con prefijo si el anterior no afectó filas
+    const res2 = await sbRequest<any[]>(`matches?id=eq.${encodeURIComponent(matchId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      headers: { 'Prefer': 'return=representation' }
+    }).catch(() => []);
+
+    console.log('Resultado del intento con ID original:', res2);
     return { success: true };
   },
 
