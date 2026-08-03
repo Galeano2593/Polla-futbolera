@@ -171,17 +171,17 @@ export const api = {
     const currentUser = JSON.parse(savedUser);
 
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
-    const cleanId = cleanMatchId(matchId);
-
-    // Creamos un ID único compuesto para satisfacer la columna obligatoria en Supabase
-    const predId = `${targetUsername}-${cleanId}`;
+    
+    // Usamos el matchId exacto tal cual viene para respetar la llave foránea con la tabla matches
+    const exactMatchId = String(matchId).trim();
+    const predId = `${targetUsername}-${exactMatchId}`;
 
     await sbRequest(`predictions`, {
       method: 'POST',
       body: JSON.stringify({
-        id: predId, // <-- ENVIAMOS EL ID REQUERIDO
+        id: predId,
         username: targetUsername,
-        match_id: cleanId,
+        match_id: exactMatchId,
         home_score: Number(homeScore),
         away_score: Number(awayScore)
       }),
@@ -193,7 +193,7 @@ export const api = {
     return { 
       prediction: { 
         id: predId, 
-        matchId: cleanId, 
+        matchId: exactMatchId, 
         userId: targetUsername, 
         homeScore, 
         awayScore, 
