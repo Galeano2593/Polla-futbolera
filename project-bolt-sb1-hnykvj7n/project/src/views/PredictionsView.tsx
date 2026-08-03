@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import type { Match } from '@/types';
 import { Calendar, CheckCircle, Lock, Loader2 } from 'lucide-react';
@@ -12,8 +12,6 @@ export default function PredictionsView() {
   const [savingState, setSavingState] = useState<Record<string, SaveState>>({});
   const [loading, setLoading] = useState(true);
 
-  const autoSaveTimers = useRef<Record<string, NodeJS.Timeout>>({});
-
   useEffect(() => {
     async function loadData() {
       try {
@@ -25,8 +23,8 @@ export default function PredictionsView() {
 
         pRes.predictions.forEach((p) => {
           initialScores[p.matchId] = {
-            home: p.homeScore.toString(),
-            away: p.awayScore.toString(),
+            home: p.homeScore !== null && p.homeScore !== undefined ? p.homeScore.toString() : '',
+            away: p.awayScore !== null && p.awayScore !== undefined ? p.awayScore.toString() : '',
           };
           initialSaveStates[p.matchId] = 'saved';
         });
@@ -40,10 +38,6 @@ export default function PredictionsView() {
       }
     }
     loadData();
-
-    return () => {
-      Object.values(autoSaveTimers.current).forEach((timer) => clearTimeout(timer));
-    };
   }, []);
 
   async function triggerSave(matchId: string, homeVal: string, awayVal: string) {
@@ -58,7 +52,7 @@ export default function PredictionsView() {
       );
       setSavingState((prev) => ({ ...prev, [matchId]: 'saved' }));
     } catch (err) {
-      console.error(err);
+      console.error("Error al guardar pronóstico:", err);
       setSavingState((prev) => ({ ...prev, [matchId]: 'idle' }));
     }
   }
@@ -77,14 +71,9 @@ export default function PredictionsView() {
       [matchId]: updatedScores,
     }));
 
-    if (autoSaveTimers.current[matchId]) {
-      clearTimeout(autoSaveTimers.current[matchId]);
-    }
-
+    // Guardado automático inmediato en cuanto ambos campos tienen un valor numérico
     if (updatedScores.home !== '' && updatedScores.away !== '') {
-      autoSaveTimers.current[matchId] = setTimeout(() => {
-        triggerSave(matchId, updatedScores.home, updatedScores.away);
-      }, 600);
+      triggerSave(matchId, updatedScores.home, updatedScores.away);
     } else {
       setSavingState((prev) => ({ ...prev, [matchId]: 'idle' }));
     }
