@@ -173,19 +173,21 @@ export const api = {
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
     const cleanId = cleanMatchId(matchId);
 
-    const predId = `${targetUsername}-${cleanId}`;
+    // Guardado robusto enviando los datos clave
     await sbRequest(`predictions`, {
       method: 'POST',
       body: JSON.stringify({
-        id: predId,
         username: targetUsername,
         match_id: cleanId,
         home_score: Number(homeScore),
         away_score: Number(awayScore)
       }),
-      headers: { 'Prefer': 'resolution=merge-duplicates' }
+      headers: { 
+        'Prefer': 'resolution=merge-duplicates' 
+      }
     });
 
+    const predId = `${targetUsername}-${cleanId}`;
     return { 
       prediction: { 
         id: predId, 
@@ -283,10 +285,6 @@ export const api = {
     return { leaderboard };
   },
 
-  // ==========================================
-  // ⚙️ FUNCIONES DE ADMINISTRACIÓN CORREGIDAS
-  // ==========================================
-
   adminCreateMatch: async (data: { homeTeam: string; awayTeam: string; kickoff: string }) => {
     const matchId = `m${Math.floor(Math.random() * 100000)}`;
 
@@ -313,14 +311,11 @@ export const api = {
       } 
     };
   },
-
   
   adminSetResult: async (matchId: string, homeScore: number, awayScore: number) => {
-    // Convertimos los marcadores a números explícitos
     const hScore = Number(homeScore);
     const aScore = Number(awayScore);
 
-    // Intentaremos actualizar probando primero el id tal cual viene y luego sin el prefijo "m" si aplica
     const targetIds = [matchId];
     if (matchId.startsWith('m')) {
       targetIds.push(matchId.substring(1));
@@ -330,7 +325,6 @@ export const api = {
 
     for (const idToTry of targetIds) {
       try {
-        // Enviar solo los campos esenciales
         await sbRequest(`matches?id=eq.${encodeURIComponent(idToTry)}`, {
           method: 'PATCH',
           body: JSON.stringify({
@@ -350,13 +344,13 @@ export const api = {
     }
 
     if (!updated) {
-      throw new Error('No se pudo actualizar el resultado del partido en Supabase. Verifica el tipo de ID o estructura de la tabla.');
+      throw new Error('No se pudo actualizar el resultado del partido en Supabase.');
     }
 
     return { success: true };
   },
 
- adminSetDeskWinResult: async (matchId: string, homeScore: number, awayScore: number) => {
+  adminSetDeskWinResult: async (matchId: string, homeScore: number, awayScore: number) => {
     const cleanId = cleanMatchId(matchId);
     try {
       await sbRequest(`matches?id=eq.${encodeURIComponent(cleanId)}`, {
