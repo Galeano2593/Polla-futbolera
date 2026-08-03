@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import type { Match } from '@/types';
-import { Calendar, CheckCircle, Lock, Loader2 } from 'lucide-react';
+import { Calendar, CheckCircle, Lock, Loader2, Save } from 'lucide-react';
 import LoadingSoccer from '@/components/LoadingSoccer';
 
 type SaveState = 'idle' | 'saving' | 'saved';
@@ -11,9 +11,6 @@ export default function PredictionsView() {
   const [scores, setScores] = useState<Record<string, { home: string; away: string }>>({});
   const [savingState, setSavingState] = useState<Record<string, SaveState>>({});
   const [loading, setLoading] = useState(true);
-
-  // Ref para almacenar los temporizadores de autosave por partido
-  const autoSaveTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
   useEffect(() => {
     async function loadData() {
@@ -26,10 +23,9 @@ export default function PredictionsView() {
 
         pRes.predictions.forEach((p) => {
           initialScores[p.matchId] = {
-            home: p.homeScore.toString(),
-            away: p.awayScore.toString(),
+            home: p.homeScore !== null && p.homeScore !== undefined ? p.homeScore.toString() : '',
+            away: p.awayScore !== null && p.awayScore !== undefined ? p.awayScore.toString() : '',
           };
-          // Los marcadores previamente guardados inician en 'saved'
           initialSaveStates[p.matchId] = 'saved';
         });
 
@@ -42,35 +38,34 @@ export default function PredictionsView() {
       }
     }
     loadData();
-
-    return () => {
-      Object.values(autoSaveTimers.current).forEach((timer) => clearTimeout(timer));
-    };
   }, []);
 
-  // Función interna para guardar el marcador en Supabase
-  async function triggerSave(matchId: string, homeVal: string, awayVal: string) {
-    if (homeVal === '' || awayVal === '') return;
+  // Función manual para guardar al hacer clic en el botón
+  async function handleManualSave(matchId: string) {
+    const current = scores[matchId];
+    if (!current || current.home === '' || current.away === '') {
+      alert('Por favor ingresa ambos marcadores antes de guardar.');
+      return;
+    }
 
     setSavingState((prev) => ({ ...prev, [matchId]: 'saving' }));
     try {
       await api.savePrediction(
         matchId,
-        parseInt(homeVal, 10),
-        parseInt(awayVal, 10)
+        parseInt(current.home, 10),
+        parseInt(current.away, 10)
       );
       setSavingState((prev) => ({ ...prev, [matchId]: 'saved' }));
     } catch (err) {
       console.error(err);
+      alert('Error al guardar el pronóstico en la base de datos.');
       setSavingState((prev) => ({ ...prev, [matchId]: 'idle' }));
     }
   }
 
   function handleScoreChange(matchId: string, side: 'home' | 'away', value: string) {
-    // Solo permitir dígitos o campo vacío
     if (value !== '' && !/^\d+$/.test(value)) return;
 
-    // Actualizar estado local del marcador inmediatamente
     const currentMatchScores = scores[matchId] || { home: '', away: '' };
     const updatedScores = {
       ...currentMatchScores,
@@ -82,19 +77,8 @@ export default function PredictionsView() {
       [matchId]: updatedScores,
     }));
 
-    // Reiniciar temporizador si el usuario sigue tecleando
-    if (autoSaveTimers.current[matchId]) {
-      clearTimeout(autoSaveTimers.current[matchId]);
-    }
-
-    // Si ambos campos tienen valor, programar Autosave (800ms debounce)
-    if (updatedScores.home !== '' && updatedScores.away !== '') {
-      autoSaveTimers.current[matchId] = setTimeout(() => {
-        triggerSave(matchId, updatedScores.home, updatedScores.away);
-      }, 800);
-    } else {
-      setSavingState((prev) => ({ ...prev, [matchId]: 'idle' }));
-    }
+    // Al modificar, pasamos el estado a 'idle' para habilitar de nuevo el botón de guardar
+    setSavingState((prev) => ({ ...prev, [matchId]: 'idle' }));
   }
 
   if (loading) {
@@ -108,7 +92,7 @@ export default function PredictionsView() {
       <div className="text-center sm:text-left mb-2">
         <h2 className="text-2xl font-bold text-white tracking-tight">Mis Predicciones</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Ingresa o modifica tus marcadores; se actualizarán automáticamente.
+          Ingresa tus marcadores y haz clic en el botón guardar para registrarlos.
         </p>
       </div>
 
@@ -120,11 +104,8 @@ export default function PredictionsView() {
         ) : (
           activeMatches.map((match) => {
             const currentState = savingState[match.id] || 'idle';
-
             const hasStarted = new Date(match.kickoff) <= new Date();
             const isFinished = match.status === 'finished';
-
-            // 🔒 ÚNICA REGLA DE BLOQUEO: Solo se bloquea si el partido arrancó o finalizó
             const isLocked = isFinished || hasStarted;
 
             return (
@@ -159,7 +140,7 @@ export default function PredictionsView() {
                   </span>
                 </div>
 
-                {/* Marcadores y Equipos */}
+                {/* Marcadores, Equipos y Botón */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div className="flex flex-1 items-center justify-center gap-2 sm:gap-4 w-full overflow-hidden">
                     <div className="flex-1 text-right font-semibold text-sm sm:text-base text-slate-100 truncate">
@@ -204,27 +185,42 @@ export default function PredictionsView() {
                     </div>
                   </div>
 
-                  {/* Insignia de Estado de Autosave */}
-                  <div className="w-full sm:w-auto flex justify-center items-center min-w-[110px]">
+                  {/* Botón de Guardado Explicito */}
+                  <div className="w-full sm:w-auto flex justify-center items-center">
                     {hasStarted || isFinished ? (
                       <div className="bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-medium text-slate-400 flex items-center gap-1.5">
                         <Lock className="w-3.5 h-3.5 text-amber-500" />
                         <span>Cerrado</span>
                       </div>
-                    ) : currentState === 'saving' ? (
-                      <div className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 animate-pulse">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Guardando...</span>
-                      </div>
-                    ) : currentState === 'saved' ? (
-                      <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Guardado</span>
-                      </div>
                     ) : (
-                      <span className="text-[11px] text-slate-500 italic">
-                        Ingresa ambos marcadores
-                      </span>
+                      <button
+                        onClick={() => handleManualSave(match.id)}
+                        disabled={currentState === 'saving'}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-lg ${
+                          currentState === 'saved'
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30'
+                            : currentState === 'saving'
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-wait'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20'
+                        }`}
+                      >
+                        {currentState === 'saving' ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Guardando...</span>
+                          </>
+                        ) : currentState === 'saved' ? (
+                          <>
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Actualizado</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Guardar</span>
+                          </>
+                        )}
+                      </button>
                     )}
                   </div>
                 </div>
