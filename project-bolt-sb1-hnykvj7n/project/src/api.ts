@@ -173,10 +173,13 @@ export const api = {
     const targetUsername = String(currentUser.rawUsername || currentUser.id).trim().toLowerCase();
     const cleanId = cleanMatchId(matchId);
 
-    // Guardado robusto enviando los datos clave
+    // Creamos un ID único compuesto para satisfacer la columna obligatoria en Supabase
+    const predId = `${targetUsername}-${cleanId}`;
+
     await sbRequest(`predictions`, {
       method: 'POST',
       body: JSON.stringify({
+        id: predId, // <-- ENVIAMOS EL ID REQUERIDO
         username: targetUsername,
         match_id: cleanId,
         home_score: Number(homeScore),
@@ -187,7 +190,6 @@ export const api = {
       }
     });
 
-    const predId = `${targetUsername}-${cleanId}`;
     return { 
       prediction: { 
         id: predId, 
