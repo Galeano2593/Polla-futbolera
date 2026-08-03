@@ -40,7 +40,7 @@ export default function PredictionsView() {
     loadData();
   }, []);
 
-  async function triggerSave(matchId: string, homeVal: string, awayVal: string) {
+ async function triggerSave(matchId: string, homeVal: string, awayVal: string) {
     if (homeVal === '' || awayVal === '') return;
 
     setSavingState((prev) => ({ ...prev, [matchId]: 'saving' }));
@@ -51,8 +51,9 @@ export default function PredictionsView() {
         parseInt(awayVal, 10)
       );
       setSavingState((prev) => ({ ...prev, [matchId]: 'saved' }));
-    } catch (err) {
-      console.error("Error al guardar pronóstico:", err);
+    } catch (err: any) {
+      console.error("Error al guardar:", err);
+      alert("❌ Falló al guardar en Supabase: " + (err.message || err));
       setSavingState((prev) => ({ ...prev, [matchId]: 'idle' }));
     }
   }
