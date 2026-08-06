@@ -4,20 +4,17 @@ interface LoadingSoccerProps {
 
 export default function LoadingSoccer({ message = 'Procesando jugada...' }: LoadingSoccerProps) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/60 backdrop-blur-md">
-      <div className="relative flex items-center justify-center bg-slate-900/80 p-6 rounded-3xl border border-slate-800 shadow-2xl ring-1 ring-emerald-500/20">
-        <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/10 to-transparent rounded-3xl blur-xl" />
-        
-        <div className="relative flex flex-col items-center gap-4">
-          {/* Balón de fútbol girando */}
-          <div className="animate-spin [animation-duration:3s] text-3xl p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 shadow-lg shadow-emerald-500/10 select-none flex items-center justify-center">
-            ⚽
-          </div>
-          
-          <p className="text-sm font-medium text-slate-200 tracking-wide px-2">
-            {message}
-          </p>
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-md">
+      <div className="flex flex-col items-center gap-6">
+        {/* Balón gigante girando sin ningún cuadro alrededor */}
+        <div className="animate-spin [animation-duration:3s] text-6xl sm:text-7xl select-none filter drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]">
+          ⚽
         </div>
+        
+        {/* Mensaje de carga */}
+        <p className="text-base font-semibold text-slate-200 tracking-wide px-4 text-center">
+          {message}
+        </p>
       </div>
     </div>
   );
